@@ -44,7 +44,7 @@
   </div>
   <div id="powerups"></div>
   <div id="combo"></div>
-  <div id="ver" title="버전">v2.3.1</div>
+  <div id="ver" title="버전">v2.4.0</div>
   <button id="pause" aria-label="일시정지">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
   <div id="toast"></div>
@@ -68,7 +68,7 @@
     <div class="small">
       ← ↑ → ↓ 이동 · 미사일 자동발사<br>
       📱 우측하단 조이스틱 · 아이템 먹으면 강해져요<br>
-      🛡 방패 · 🔫 멀티샷 · 💣 폭탄 · ❤️ 회복 · 🧲 자석
+      🛡 방패(중첩) · 🔫 멀티샷(레벨업) · 💣 폭탄 · ❤️ 회복 · 🧲 자석(레벨업)<br>아이템은 시간 제한 없이 영구 누적!
     </div>
   </div>
 </div>
@@ -100,7 +100,7 @@ function loadAssetImg(path){ const im=new Image(); im.src=path; return im; }
 let planeImg = loadImg(LS_PLANE);
 let bgImg = loadImg(LS_BG);
 // fallback: try repo assets if user hasn't uploaded
-if(!planeImg){ const im=new Image(); im.onload=()=>{ if(!planeImg) planeImg=im; }; im.src='assets/plane.png'; }
+if(!planeImg){ const im=new Image(); im.onload=()=>{ if(!planeImg) planeImg=im; }; im.src='assets/plane.svg'; }
 if(!bgImg){ const im=new Image(); im.onload=()=>{ if(!bgImg) bgImg=im; }; im.src='assets/space.jpg'; }
 let hiScore = +(localStorage.getItem(LS_HI)||0);
 $('hiScore').textContent = hiScore;
@@ -337,14 +337,14 @@ const state = {
   spawnTimer:0
 };
 const player = { x:0, y:0, w:108, h:108, cool:0, inv:0,
-  shield:0, multi:0, magnet:0, bombFlash:0,
+  shield:0, multiLv:0, magnetLv:0, bombFlash:0,
   trail:[]
 };
 const bullets = [], enemies = [], items = [], fx = [], stars = [], clouds = [];
 
 function reset(){
   Object.assign(state,{running:true,paused:false,score:0,hp:3,lv:1,t:0,bossActive:false,bossSpawnAt:25,combo:0,comboTimer:0,shake:0,spawnTimer:0});
-  Object.assign(player,{x:W/2,y:H*0.78,cool:0,inv:90,shield:0,multi:0,magnet:0,bombFlash:0,trail:[]});
+  Object.assign(player,{x:W/2,y:H*0.78,cool:0,inv:90,shield:0,multiLv:0,magnetLv:0,bombFlash:0,trail:[]});
   bullets.length=0; enemies.length=0; items.length=0; fx.length=0; clouds.length=0; stars.length=0;
   // clouds disabled (space background)
   for(let i=0;i<60;i++) stars.push({x:Math.random()*W,y:Math.random()*H,z:Math.random()*1+0.3,r:Math.random()*1.4+0.4});
@@ -710,17 +710,19 @@ function maybeDropItem(x,y){
 
 function shoot(){
   if(player.cool>0) return;
-  const ms = player.multi>0;
-  if(ms){
-    bullets.push({x:player.x-14,y:player.y-30,vx:0,vy:-620,r:5,from:'p'});
-    bullets.push({x:player.x+14,y:player.y-30,vx:0,vy:-620,r:5,from:'p'});
-    bullets.push({x:player.x-26,y:player.y-12,vx:-90,vy:-580,r:5,from:'p'});
-    bullets.push({x:player.x+26,y:player.y-12,vx:90,vy:-580,r:5,from:'p'});
-  } else {
-    bullets.push({x:player.x-12,y:player.y-30,vx:0,vy:-580,r:5,from:'p'});
-    bullets.push({x:player.x+12,y:player.y-30,vx:0,vy:-580,r:5,from:'p'});
+  const lv = player.multiLv;
+  // base 2 forward bullets, +2 per level (angled), max useful ~Lv8
+  bullets.push({x:player.x-12,y:player.y-30,vx:0,vy:-600,r:5,from:'p'});
+  bullets.push({x:player.x+12,y:player.y-30,vx:0,vy:-600,r:5,from:'p'});
+  for(let i=1;i<=Math.min(lv,8);i++){
+    const angle = i*0.10;
+    const speed = 600;
+    bullets.push({x:player.x-14-i*4,y:player.y-20,vx:-Math.sin(angle)*speed,vy:-Math.cos(angle)*speed,r:5,from:'p'});
+    bullets.push({x:player.x+14+i*4,y:player.y-20,vx: Math.sin(angle)*speed,vy:-Math.cos(angle)*speed,r:5,from:'p'});
   }
-  player.cool = ms?0.12:0.16;
+  // backward shots at higher levels
+  if(lv>=5){ bullets.push({x:player.x-10,y:player.y+20,vx:0,vy:520,r:5,from:'p'}); bullets.push({x:player.x+10,y:player.y+20,vx:0,vy:520,r:5,from:'p'}); }
+  player.cool = Math.max(0.07, 0.16 - lv*0.01);
   sfxShoot();
 }
 function enemyShoot(e){
@@ -757,26 +759,25 @@ function toast(msg, ms){
 function pickupItem(it){
   sfxItem();
   const T = it.type;
-  if(T==='heal'){ state.hp=Math.min(state.maxHp,state.hp+1); $('hp').textContent=state.hp; toast('❤️ +1'); }
-  else if(T==='shield'){ player.shield = 8; toast('🛡 방패 8초'); sfxPower(); }
-  else if(T==='multi'){ player.multi = 12; toast('🔫 멀티샷 12초'); sfxPower(); }
-  else if(T==='magnet'){ player.magnet = 10; toast('🧲 자석 10초'); sfxPower(); }
+  if(T==='heal'){ state.maxHp = Math.max(state.maxHp, state.hp+1); state.hp += 1; $('hp').textContent=state.hp; toast('❤️ +1 HP'); }
+  else if(T==='shield'){ player.shield += 3; toast('🛡 방패 +3 ('+player.shield+')'); sfxPower(); }
+  else if(T==='multi'){ player.multiLv += 1; toast('🔫 멀티샷 Lv '+player.multiLv); sfxPower(); }
+  else if(T==='magnet'){ player.magnetLv += 1; toast('🧲 자석 Lv '+player.magnetLv); sfxPower(); }
   else if(T==='bomb'){
     toast('💣 BOMB!'); sfxBoom(true); state.shake=20; player.bombFlash=0.4;
     for(const en of enemies){
       if(en.kind!=='boss'){ explode(en.x,en.y,12,'#fc4'); en.hp=0; }
       else { en.hp -= 8; }
     }
-    bullets.length = bullets.filter(b=>b.from==='p').length;
-    bullets.length = 0;
+    for(let i=bullets.length-1;i>=0;i--) if(bullets[i].from==='e') bullets.splice(i,1);
   }
   updatePowerupUI();
 }
 function updatePowerupUI(){
   const arr=[];
-  if(player.shield>0) arr.push(`🛡 ${player.shield.toFixed(1)}s`);
-  if(player.multi>0) arr.push(`🔫 ${player.multi.toFixed(1)}s`);
-  if(player.magnet>0) arr.push(`🧲 ${player.magnet.toFixed(1)}s`);
+  if(player.shield>0) arr.push(`🛡 ×${player.shield}`);
+  if(player.multiLv>0) arr.push(`🔫 Lv${player.multiLv}`);
+  if(player.magnetLv>0) arr.push(`🧲 Lv${player.magnetLv}`);
   $('powerups').innerHTML = arr.map(s=>`<div class="pu">${s}</div>`).join('');
 }
 
@@ -806,9 +807,6 @@ function loop(ts){
   player.cool -= dt; if(player.cool<=0) shoot();
   player.inv = Math.max(0, player.inv - 1);
   // powerup timers
-  if(player.shield>0) player.shield = Math.max(0, player.shield-dt);
-  if(player.multi>0) player.multi = Math.max(0, player.multi-dt);
-  if(player.magnet>0) player.magnet = Math.max(0, player.magnet-dt);
   if(player.bombFlash>0) player.bombFlash = Math.max(0, player.bombFlash-dt);
   state.shake = Math.max(0, state.shake-dt*60);
   if(state.comboTimer>0){ state.comboTimer-=dt; if(state.comboTimer<=0){ state.combo=0; $('combo').style.display='none'; } }
@@ -860,6 +858,7 @@ function loop(ts){
       if(player.shield>0){
         if(Math.abs(b.x-player.x)<26 && Math.abs(b.y-player.y)<26){
           bullets.splice(i,1); ringFx(b.x,b.y,'#7af');
+          player.shield--; updatePowerupUI();
         }
       } else if(player.inv<=0 && Math.abs(b.x-player.x)<26 && Math.abs(b.y-player.y)<26){
         bullets.splice(i,1); hitPlayer();
@@ -889,8 +888,8 @@ function loop(ts){
     // collide with player
     if(player.inv<=0 && Math.abs(e.x-player.x)<(e.w+player.w*0.6)/2 && Math.abs(e.y-player.y)<(e.h+player.h*0.6)/2){
       if(player.shield>0){
-        if(e.kind!=='boss'){ explode(e.x,e.y,16,'#7af'); sfxBoom(); enemies.splice(i,1); state.shake=8; continue; }
-        else { e.hp -= 5; player.shield = Math.max(0, player.shield-2); }
+        if(e.kind!=='boss'){ explode(e.x,e.y,16,'#7af'); sfxBoom(); enemies.splice(i,1); state.shake=8; player.shield--; updatePowerupUI(); continue; }
+        else { e.hp -= 5; player.shield = Math.max(0, player.shield-2); updatePowerupUI(); }
       } else {
         hitPlayer();
         if(e.kind!=='boss'){ explode(e.x,e.y,12,'#fc4'); sfxBoom(); enemies.splice(i,1); }
@@ -901,9 +900,11 @@ function loop(ts){
   // items
   for(let i=items.length-1;i>=0;i--){
     const it=items[i];
-    if(player.magnet>0){
+    if(player.magnetLv>0){
+      const radius = 250 + player.magnetLv*120;
+      const speed = 180 + player.magnetLv*60;
       const dx=player.x-it.x, dy=player.y-it.y, d=Math.hypot(dx,dy);
-      if(d<400){ it.x += dx/d*220*dt; it.y += dy/d*220*dt; }
+      if(d<radius){ it.x += dx/d*speed*dt; it.y += dy/d*speed*dt; }
     }
     it.y += it.vy*dt;
     if(Math.abs(it.x-player.x)<player.w*0.5 && Math.abs(it.y-player.y)<player.h*0.5){
