@@ -44,7 +44,7 @@
   </div>
   <div id="powerups"></div>
   <div id="combo"></div>
-  <div id="ver" title="버전">v2.5.0</div>
+  <div id="ver" title="버전">v2.5.1</div>
   <button id="pause" aria-label="일시정지">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
   <div id="toast"></div>
@@ -94,7 +94,13 @@ if(isTouch){ $('stick').style.display='block'; }
 const rand = (a,b)=>a+Math.random()*(b-a);
 
 // ========= storage =========
-const LS_PLANE='sf_plane_img', LS_BG='sf_bg_img', LS_HI='sf_hi';
+const LS_PLANE='sf_plane_img', LS_BG='sf_bg_img', LS_HI='sf_hi', LS_PLANE_V='sf_plane_v';
+// One-time cleanup: if user has a plane image saved without the version marker
+// (= uploaded before v2.5 chroma-key fix), drop it so the fresh assets/plane.png is used.
+const PLANE_VERSION_REQUIRED = 5;
+if(localStorage.getItem(LS_PLANE) && +(localStorage.getItem(LS_PLANE_V)||0) < PLANE_VERSION_REQUIRED){
+  localStorage.removeItem(LS_PLANE);
+}
 function loadImg(key){ const d=localStorage.getItem(key); if(!d) return null; const im=new Image(); im.src=d; return im; }
 function loadAssetImg(path){ const im=new Image(); im.src=path; return im; }
 let planeImg = loadImg(LS_PLANE);
@@ -237,8 +243,8 @@ function readFile(f, key, setter, isPlane){
   r.onload=()=>{
     const fn = isPlane? resizePngDataUrl : resizeDataUrl;
     fn(r.result, isPlane?256:512, (data)=>{
-      try{ localStorage.setItem(key, data); }
-      catch(e){ try{ localStorage.removeItem(key); localStorage.setItem(key,data); }catch(e2){ alert('저장 공간 부족. 이번 게임에만 사용해요.'); } }
+      try{ localStorage.setItem(key, data); if(isPlane) localStorage.setItem(LS_PLANE_V, String(PLANE_VERSION_REQUIRED)); }
+      catch(e){ try{ localStorage.removeItem(key); localStorage.setItem(key,data); if(isPlane) localStorage.setItem(LS_PLANE_V, String(PLANE_VERSION_REQUIRED)); }catch(e2){ alert('저장 공간 부족. 이번 게임에만 사용해요.'); } }
       const im=new Image(); im.onload=()=>{ setter(im); setPreview(); }; im.src=data;
     });
   };
@@ -247,8 +253,11 @@ function readFile(f, key, setter, isPlane){
 $('planeFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readFile(f, LS_PLANE, im=>planeImg=im, true); });
 $('bgFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readFile(f, LS_BG, im=>bgImg=im, false); });
 $('resetImg').addEventListener('click', ()=>{
-  localStorage.removeItem(LS_PLANE); localStorage.removeItem(LS_BG);
+  localStorage.removeItem(LS_PLANE); localStorage.removeItem(LS_BG); localStorage.removeItem(LS_PLANE_V);
   planeImg=null; bgImg=null; setPreview();
+  // re-trigger asset loads
+  const im=new Image(); im.onload=()=>{ if(!planeImg){ planeImg=im; setPreview(); } }; im.src='assets/plane.png?'+Date.now();
+  const im2=new Image(); im2.onload=()=>{ if(!bgImg){ bgImg=im2; setPreview(); } }; im2.src='assets/space.jpg?'+Date.now();
 });
 
 // ========= audio =========
