@@ -44,7 +44,7 @@
   </div>
   <div id="powerups"></div>
   <div id="combo"></div>
-  <div id="ver" title="버전">v2.3.0</div>
+  <div id="ver" title="버전">v2.3.1</div>
   <button id="pause" aria-label="일시정지">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
   <div id="toast"></div>
@@ -143,6 +143,20 @@ function resizePngDataUrl(srcUrl, maxSide, cb){
     try{
       const id=cx.getImageData(0,0,w,h);
       const d=id.data;
+      // skip if image is already largely transparent at the borders
+      let borderTransparent=0, borderTotal=0;
+      for(let xx=0; xx<w; xx+=Math.max(1,Math.floor(w/30))){
+        if(d[(xx)*4+3]<10) borderTransparent++; borderTotal++;
+        if(d[((h-1)*w+xx)*4+3]<10) borderTransparent++; borderTotal++;
+      }
+      for(let yy=0; yy<h; yy+=Math.max(1,Math.floor(h/30))){
+        if(d[(yy*w)*4+3]<10) borderTransparent++; borderTotal++;
+        if(d[(yy*w+w-1)*4+3]<10) borderTransparent++; borderTotal++;
+      }
+      if(borderTransparent/borderTotal > 0.5){
+        // already a proper transparent PNG — leave it alone
+        cb(c.toDataURL('image/png')); return;
+      }
       const TOL=70; // perceived color distance threshold
       // seed colors: scan all border pixels, take median RGB
       const cols=[];
