@@ -96,8 +96,12 @@ const rand = (a,b)=>a+Math.random()*(b-a);
 // ========= storage =========
 const LS_PLANE='sf_plane_img', LS_BG='sf_bg_img', LS_HI='sf_hi';
 function loadImg(key){ const d=localStorage.getItem(key); if(!d) return null; const im=new Image(); im.src=d; return im; }
+function loadAssetImg(path){ const im=new Image(); im.src=path; return im; }
 let planeImg = loadImg(LS_PLANE);
 let bgImg = loadImg(LS_BG);
+// fallback: try repo assets if user hasn't uploaded
+if(!planeImg){ const im=new Image(); im.onload=()=>{ if(!planeImg) planeImg=im; }; im.src='assets/plane.png'; }
+if(!bgImg){ const im=new Image(); im.onload=()=>{ if(!bgImg) bgImg=im; }; im.src='assets/space.jpg'; }
 let hiScore = +(localStorage.getItem(LS_HI)||0);
 $('hiScore').textContent = hiScore;
 
