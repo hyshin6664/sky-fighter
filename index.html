@@ -49,7 +49,7 @@
   </div>
   <div id="powerups"></div>
   <div id="combo"></div>
-  <div id="ver" title="버전">v3.0.0</div>
+  <div id="ver" title="버전">v3.1.0</div>
   <button id="pause" aria-label="일시정지">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
   <button id="bombBtn" aria-label="폭탄 사용">💣<span class="cnt" id="bombCnt">0</span></button>
@@ -73,9 +73,11 @@
     <button id="start" class="primary">▶ START</button>
     <div class="small">
       ← ↑ → ↓ 이동 · 미사일 자동발사 · <b>SPACE = 폭탄</b><br>
-      📱 우측하단 조이스틱 · 좌측하단 폭탄 버튼<br>
-      🔫 멀티샷 · ⚡ 전기 · 🔥 화염 · 🎯 유도탄 · 🛡 방패 · ❤️ 회복 · 🧲 자석 · 💣 폭탄(저장)<br>
-      공격 아이템은 12초간 무기 교체!
+      📱 우측하단 조이스틱 · 좌측하단 💣 버튼<br>
+      🔫 멀티샷 · ⚡ 전기 · 🔥 화염 · 🧨 화염방사기 · 🎯 유도탄<br>
+      🛡 방패 · ❤️ 회복 · 🧲 자석 · 💣 폭탄(최대 10개 저장)<br>
+      <b>아이템 같은 종류 먹을수록 레벨업 (최대 Lv10)</b><br>
+      보스 처치마다 배경·BGM 변화!
     </div>
   </div>
 </div>
@@ -117,13 +119,18 @@ if(!planeImg){ const im=new Image(); im.onload=()=>{ if(!planeImg) planeImg=im; 
 if(!bgImg){ const im=new Image(); im.onload=()=>{ if(!bgImg) bgImg=im; }; im.src='assets/space.jpg'; }
 
 // Enemy + boss sprites
-const enemySprites = { mob:null, scout:null, shooter:null, bomber:null, boss:null };
+const enemySprites = { mob:null, scout:null, shooter:null, bomber:null };
 function loadSprite(key, path){ const im=new Image(); im.onload=()=>{ enemySprites[key]=im; }; im.src=path; }
 loadSprite('mob','assets/enemy_mob.png');
 loadSprite('scout','assets/enemy_scout.png');
 loadSprite('shooter','assets/enemy_shooter.png');
 loadSprite('bomber','assets/enemy_bomber.png');
-loadSprite('boss','assets/boss.png');
+
+// Backgrounds — cycle through after each boss
+const SPACE_BGS = ['assets/space.jpg','assets/space2.jpg','assets/space3.jpg','assets/space4.jpg'];
+const bgPool = SPACE_BGS.map(p=>{ const im=new Image(); im.src=p; return im; });
+let bgIdx = 0;
+function nextBg(){ bgIdx = (bgIdx+1) % bgPool.length; if(!localStorage.getItem(LS_BG)) bgImg = bgPool[bgIdx]; }
 let hiScore = +(localStorage.getItem(LS_HI)||0);
 $('hiScore').textContent = hiScore;
 
@@ -305,20 +312,32 @@ function sfxBoom(big){ noise(big?0.45:0.2, big?0.14:0.08); for(let i=0;i<(big?8:
 function sfxBoss(){ beep(220,0.2,'sine',0.1); setTimeout(()=>beep(160,0.3,'sine',0.1),180); setTimeout(()=>beep(110,0.4,'sine',0.1),420); }
 function sfxItem(){ beep(880,0.07,'square',0.05); setTimeout(()=>beep(1320,0.09,'square',0.05),60); }
 function sfxPower(){ for(let i=0;i<5;i++) setTimeout(()=>beep(440+i*110,0.07,'square',0.05),i*40); }
-let bgmTimer=null, bgmStep=0, bgmMode='normal';
-const BGM_NORMAL = [262,330,392,330, 294,349,440,349, 330,392,494,392, 262,330,392,523];
-const BGM_BOSS   = [196,247,294,247, 220,277,330,277, 247,294,370,294, 196,247,294,392];
+let bgmTimer=null, bgmStep=0, bgmMode='stage1';
+const BGM_TRACKS = {
+  stage1: { notes:[262,330,392,330, 294,349,440,349, 330,392,494,392, 262,330,392,523], tempo:240, wave:'triangle' },
+  stage2: { notes:[294,349,440,349, 330,392,494,392, 392,440,523,440, 294,349,440,587], tempo:215, wave:'triangle' },
+  stage3: { notes:[330,392,494,392, 370,440,554,440, 415,494,622,494, 330,392,494,659], tempo:185, wave:'sawtooth' },
+  stage4: { notes:[277,349,415,349, 311,392,466,392, 349,440,523,440, 277,349,415,554], tempo:160, wave:'sawtooth' },
+  boss:   { notes:[196,247,294,247, 220,277,330,277, 247,294,370,294, 196,247,294,392], tempo:200, wave:'sawtooth' }
+};
 function bgmStart(){
   bgmStop();
+  const t = BGM_TRACKS[bgmMode] || BGM_TRACKS.stage1;
   bgmTimer=setInterval(()=>{
-    const arr = bgmMode==='boss'?BGM_BOSS:BGM_NORMAL;
-    const f = arr[bgmStep++ % arr.length];
-    beep(f,0.18,'triangle',0.03);
+    const f = t.notes[bgmStep++ % t.notes.length];
+    beep(f,0.18,t.wave,0.03);
     if(bgmStep%4===0) beep(f/2,0.22,'sine',0.022);
-  }, bgmMode==='boss'?200:240);
+  }, t.tempo);
 }
 function bgmStop(){ if(bgmTimer){ clearInterval(bgmTimer); bgmTimer=null; } }
 function bgmSwitch(mode){ bgmMode=mode; if(bgmTimer){ bgmStart(); } }
+function bgmForLevel(lv, isBoss){
+  if(isBoss) return 'boss';
+  if(lv<=2) return 'stage1';
+  if(lv<=4) return 'stage2';
+  if(lv<=6) return 'stage3';
+  return 'stage4';
+}
 
 // ========= input =========
 const keys = {};
@@ -389,22 +408,27 @@ const state = {
   shake:0,
   spawnTimer:0
 };
+// item levels stack up to MAX_LV
+const MAX_LV = 10;
 const player = { x:0, y:0, w:108, h:108, cool:0, inv:0,
-  shield:0, magnet:0,
-  attackMode:'normal', attackT:0,  // attack modes: normal/multi/electric/fire/homing
-  bombs:0,                         // bomb inventory (max 3)
+  shieldLv:0, magnetLv:0,
+  attackMode:'normal', attackLv:{multi:0,electric:0,fire:0,homing:0,flame:0},
+  bombs:0,                         // bomb inventory (max 10)
   bombFlash:0,
+  flameT:0,                        // flamethrower spray timer
   trail:[]
 };
 const bullets = [], enemies = [], items = [], fx = [], stars = [], clouds = [];
 
 function reset(){
   Object.assign(state,{running:true,paused:false,score:0,hp:3,lv:1,t:0,bossActive:false,bossSpawnAt:25,combo:0,comboTimer:0,shake:0,spawnTimer:0});
-  Object.assign(player,{x:W/2,y:H*0.78,cool:0,inv:90,shield:0,magnet:0,attackMode:'normal',attackT:0,bombs:1,bombFlash:0,trail:[]});
+  Object.assign(player,{x:W/2,y:H*0.78,cool:0,inv:90,shieldLv:0,magnetLv:0,attackMode:'normal',attackLv:{multi:0,electric:0,fire:0,homing:0,flame:0},bombs:1,bombFlash:0,flameT:0,trail:[]});
   bullets.length=0; enemies.length=0; items.length=0; fx.length=0; clouds.length=0; stars.length=0;
   // clouds disabled (space background)
   for(let i=0;i<60;i++) stars.push({x:Math.random()*W,y:Math.random()*H,z:Math.random()*1+0.3,r:Math.random()*1.4+0.4});
-  bgmMode='normal';
+  bgmMode='stage1';
+  bgIdx = 0;
+  if(!localStorage.getItem(LS_BG)) bgImg = bgPool[0];
   $('hp').textContent=state.hp; $('score').textContent=0; $('lv').textContent=1;
   updatePowerupUI();
 }
@@ -583,27 +607,172 @@ function drawPlayer(){
   }
 }
 
+// Scary monster boss — drawn dynamically every frame
+function drawScaryBoss(e){
+  const t = state.t;
+  const W2 = e.w, H2 = e.h;
+  const pulse = 1 + Math.sin(t*4)*0.05;
+
+  // dark aura
+  ctx.save();
+  const aura = ctx.createRadialGradient(0,0,W2*0.3,0,0,W2*0.9);
+  aura.addColorStop(0,'rgba(120,0,40,0.7)');
+  aura.addColorStop(0.6,'rgba(60,0,80,0.4)');
+  aura.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=aura;
+  ctx.fillRect(-W2,-H2,W2*2,H2*2);
+  ctx.restore();
+
+  // tentacles waving (8 of them)
+  ctx.save();
+  ctx.strokeStyle='#1a0830'; ctx.lineWidth=10; ctx.lineCap='round';
+  for(let i=0;i<8;i++){
+    const baseA = (i/8)*Math.PI*2;
+    const len = W2*0.55*pulse;
+    const wave = Math.sin(t*2+i)*0.6;
+    const x1 = Math.cos(baseA)*W2*0.35;
+    const y1 = Math.sin(baseA)*H2*0.32;
+    const x2 = Math.cos(baseA+wave)*len;
+    const y2 = Math.sin(baseA+wave)*len*0.95;
+    ctx.beginPath(); ctx.moveTo(x1,y1);
+    ctx.quadraticCurveTo(x1*1.4, y1*1.4, x2, y2);
+    ctx.stroke();
+    // tentacle tip suckers
+    ctx.fillStyle='#3a0a4a';
+    ctx.beginPath(); ctx.arc(x2,y2,5,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+
+  // body — dark organic blob
+  ctx.save();
+  ctx.scale(pulse,pulse);
+  const body = ctx.createRadialGradient(0,-H2*0.05,W2*0.1,0,0,W2*0.45);
+  body.addColorStop(0,'#5a1030');
+  body.addColorStop(0.5,'#2a0820');
+  body.addColorStop(1,'#0a0414');
+  ctx.fillStyle=body;
+  ctx.beginPath();
+  // organic blob with bumps
+  const N=18;
+  for(let i=0;i<N;i++){
+    const a=i/N*Math.PI*2;
+    const r=W2*0.42 + Math.sin(a*3+t)*8 + Math.cos(a*5)*6;
+    const x=Math.cos(a)*r, y=Math.sin(a)*r*1.05;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.closePath(); ctx.fill();
+
+  // skin texture spots
+  ctx.fillStyle='rgba(80,10,30,0.6)';
+  for(let i=0;i<14;i++){
+    const a=i/14*Math.PI*2 + t*0.1;
+    const r=W2*0.25;
+    const x=Math.cos(a)*r, y=Math.sin(a)*r;
+    ctx.beginPath(); ctx.arc(x,y,4+Math.sin(t*3+i)*1.5,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+
+  // spikes around top
+  ctx.save();
+  ctx.fillStyle='#0a0414';
+  for(let i=0;i<7;i++){
+    const a=-Math.PI/2 + (i-3)*0.3;
+    const baseR=W2*0.42, tipR=W2*0.55;
+    const baseW=8;
+    const bx=Math.cos(a)*baseR, by=Math.sin(a)*baseR*1.05;
+    const tx=Math.cos(a)*tipR, ty=Math.sin(a)*tipR*1.05;
+    const px=Math.cos(a+Math.PI/2)*baseW, py=Math.sin(a+Math.PI/2)*baseW;
+    ctx.beginPath();
+    ctx.moveTo(bx-px, by-py);
+    ctx.lineTo(tx, ty);
+    ctx.lineTo(bx+px, by+py);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+
+  // glowing red eyes (2)
+  const eyeGlow = 0.6+Math.sin(t*3)*0.3;
+  for(const sx of [-1,1]){
+    const ex = sx*W2*0.16, ey = -H2*0.05;
+    ctx.save();
+    ctx.shadowBlur = 30; ctx.shadowColor = '#ff2030';
+    const g = ctx.createRadialGradient(ex,ey,0,ex,ey,18);
+    g.addColorStop(0,'#ffffff');
+    g.addColorStop(0.3,'#ff5560');
+    g.addColorStop(1,`rgba(120,0,20,${eyeGlow})`);
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(ex,ey,16,0,Math.PI*2); ctx.fill();
+    // pupil tracks player
+    const pa = Math.atan2(player.y-e.y-ey, player.x-e.x-ex);
+    const px = ex+Math.cos(pa)*5, py = ey+Math.sin(pa)*5;
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#1a0000';
+    ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2); ctx.fill();
+    // eye-shine
+    ctx.fillStyle='rgba(255,200,200,0.7)';
+    ctx.beginPath(); ctx.arc(px-1,py-1,1.6,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // mouth — jagged maw
+  ctx.save();
+  const my = H2*0.18, mw = W2*0.32, mh = H2*0.10;
+  // glow inside
+  const mg = ctx.createRadialGradient(0,my,2,0,my,mw*0.9);
+  mg.addColorStop(0,'#ffaa30');
+  mg.addColorStop(0.5,'#cc2010');
+  mg.addColorStop(1,'#000');
+  ctx.fillStyle=mg;
+  ctx.beginPath();
+  ctx.moveTo(-mw, my);
+  ctx.lineTo(mw, my);
+  ctx.lineTo(mw*0.7, my+mh*1.4);
+  ctx.lineTo(-mw*0.7, my+mh*1.4);
+  ctx.closePath(); ctx.fill();
+  // teeth
+  ctx.fillStyle='#fffbe0';
+  const teeth=8;
+  for(let i=0;i<teeth;i++){
+    const xx = -mw + (i+0.5)*(mw*2/teeth);
+    ctx.beginPath();
+    ctx.moveTo(xx-3,my);
+    ctx.lineTo(xx+3,my);
+    ctx.lineTo(xx, my+8+Math.sin(i)*2);
+    ctx.closePath(); ctx.fill();
+  }
+  // bottom teeth
+  for(let i=0;i<teeth-1;i++){
+    const xx = -mw*0.7 + (i+0.5)*(mw*1.4/(teeth-1));
+    ctx.beginPath();
+    ctx.moveTo(xx-3,my+mh*1.4);
+    ctx.lineTo(xx+3,my+mh*1.4);
+    ctx.lineTo(xx, my+mh*1.4-7);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+
+  // HP bar
+  const bw=e.w*1.0, bh=8, ratio=Math.max(0,e.hp/e.maxHp);
+  ctx.fillStyle='#220'; ctx.fillRect(-bw/2, -e.h/2-22, bw, bh);
+  ctx.fillStyle = ratio>0.5?'#7f4':ratio>0.25?'#fc4':'#f44';
+  ctx.fillRect(-bw/2, -e.h/2-22, bw*ratio, bh);
+  ctx.strokeStyle='#000'; ctx.lineWidth=1.5; ctx.strokeRect(-bw/2, -e.h/2-22, bw, bh);
+}
+
 function drawEnemy(e){
   ctx.save(); ctx.translate(e.x,e.y);
-  // sprite path (preferred) — facing down by default in source, so flip 180°
+  if(e.kind==='boss'){
+    drawScaryBoss(e);
+    ctx.restore();
+    return;
+  }
+  // sprite path for non-boss enemies — facing down by default in source, so flip 180°
   const spr = enemySprites[e.kind];
   if(spr && spr.complete && spr.naturalWidth){
     ctx.save();
-    ctx.rotate(Math.PI); // face downward toward player
-    if(e.kind==='boss'){
-      ctx.shadowBlur=22; ctx.shadowColor='#a04bff';
-      ctx.drawImage(spr, -e.w/2, -e.h/2, e.w, e.h);
-      ctx.shadowBlur=0;
-    } else {
-      ctx.drawImage(spr, -e.w/2, -e.h/2, e.w, e.h);
-    }
+    ctx.rotate(Math.PI);
+    ctx.drawImage(spr, -e.w/2, -e.h/2, e.w, e.h);
     ctx.restore();
-    if(e.kind==='boss'){
-      const bw=e.w*1.1, bh=7, ratio=Math.max(0,e.hp/e.maxHp);
-      ctx.fillStyle='#220'; ctx.fillRect(-bw/2, -e.h/2-18, bw, bh);
-      ctx.fillStyle = ratio>0.5?'#7f4':ratio>0.25?'#fc4':'#f44';
-      ctx.fillRect(-bw/2, -e.h/2-18, bw*ratio, bh);
-    }
     ctx.restore();
     return;
   }
@@ -694,13 +863,14 @@ const ITEM_TYPES = {
   multi:    {color:'#ff7', emoji:'🔫', label:'멀티샷'},
   electric: {color:'#9af', emoji:'⚡', label:'전기'},
   fire:     {color:'#f73', emoji:'🔥', label:'화염'},
+  flame:    {color:'#fc4', emoji:'🧨', label:'화염방사기'},
   homing:   {color:'#fa7', emoji:'🎯', label:'유도탄'},
   bomb:     {color:'#f77', emoji:'💣', label:'폭탄'},
   heal:     {color:'#f7a', emoji:'❤️', label:'회복'},
   magnet:   {color:'#7fa', emoji:'🧲', label:'자석'}
 };
-const ATTACK_TYPES = ['multi','electric','fire','homing'];
-const ATTACK_LABEL = {multi:'멀티샷',electric:'전기',fire:'화염',homing:'유도탄',normal:''};
+const ATTACK_TYPES = ['multi','electric','fire','flame','homing'];
+const ATTACK_LABEL = {multi:'멀티샷',electric:'전기',fire:'화염',flame:'화염방사기',homing:'유도탄',normal:''};
 function drawItem(it){
   ctx.save(); ctx.translate(it.x,it.y);
   const t=state.t;
@@ -778,10 +948,10 @@ function spawnEnemy(){
   enemies.push(e);
 }
 function spawnBoss(){
-  state.bossActive=true; bgmMode='boss'; bgmSwitch('boss');
-  enemies.push({x:W/2,y:-160,w:200,h:240,hp:35+state.lv*10,maxHp:35+state.lv*10,kind:'boss',vy:25,vx:70,t:0,phase:1,fireT:1});
-  toast('👑 BOSS!'); sfxBoss();
-  state.shake = 12;
+  state.bossActive=true; bgmSwitch('boss');
+  enemies.push({x:W/2,y:-180,w:240,h:260,hp:40+state.lv*12,maxHp:40+state.lv*12,kind:'boss',vy:25,vx:70,t:0,phase:1,fireT:1});
+  toast('👹 어둠의 군주 강림!', 1800); sfxBoss();
+  state.shake = 16;
 }
 function maybeDropItem(x,y){
   if(Math.random()<0.14){
@@ -794,34 +964,58 @@ function maybeDropItem(x,y){
 function shoot(){
   if(player.cool>0) return;
   const M = player.attackMode;
+  const lv = M==='normal'?0:(player.attackLv[M]||1);
   if(M==='multi'){
+    // base 2, +2 per level (angled), +back at lv5+
     bullets.push({x:player.x-12,y:player.y-30,vx:0,vy:-620,r:5,from:'p',type:'normal'});
     bullets.push({x:player.x+12,y:player.y-30,vx:0,vy:-620,r:5,from:'p',type:'normal'});
-    bullets.push({x:player.x-22,y:player.y-15,vx:-150,vy:-580,r:5,from:'p',type:'normal'});
-    bullets.push({x:player.x+22,y:player.y-15,vx: 150,vy:-580,r:5,from:'p',type:'normal'});
-    bullets.push({x:player.x-30,y:player.y-5,vx:-260,vy:-520,r:5,from:'p',type:'normal'});
-    bullets.push({x:player.x+30,y:player.y-5,vx: 260,vy:-520,r:5,from:'p',type:'normal'});
-    player.cool = 0.10;
+    for(let i=1;i<=Math.min(lv,8);i++){
+      const ang = i*0.10, sp=600;
+      bullets.push({x:player.x-14-i*4,y:player.y-20,vx:-Math.sin(ang)*sp,vy:-Math.cos(ang)*sp,r:5,from:'p',type:'normal'});
+      bullets.push({x:player.x+14+i*4,y:player.y-20,vx: Math.sin(ang)*sp,vy:-Math.cos(ang)*sp,r:5,from:'p',type:'normal'});
+    }
+    if(lv>=5){ bullets.push({x:player.x-10,y:player.y+20,vx:0,vy:520,r:5,from:'p',type:'normal'}); bullets.push({x:player.x+10,y:player.y+20,vx:0,vy:520,r:5,from:'p',type:'normal'}); }
+    player.cool = Math.max(0.06, 0.14 - lv*0.008);
   } else if(M==='electric'){
-    // chain lightning bolt — single shot that arcs to nearest enemies
-    bullets.push({x:player.x,y:player.y-30,vx:0,vy:-700,r:7,from:'p',type:'electric',chains:3,life:1.5});
-    player.cool = 0.18;
+    // chains: 2 + lv (max 12)
+    const chains = Math.min(12, 2+lv);
+    bullets.push({x:player.x,y:player.y-30,vx:0,vy:-700,r:6+Math.min(4,lv*0.4),from:'p',type:'electric',chains,life:1.5,dmg:1+Math.floor(lv/3)});
+    if(lv>=4){ bullets.push({x:player.x-22,y:player.y-22,vx:-100,vy:-680,r:5,from:'p',type:'electric',chains:Math.max(2,chains-2),life:1.3,dmg:1}); }
+    if(lv>=4){ bullets.push({x:player.x+22,y:player.y-22,vx: 100,vy:-680,r:5,from:'p',type:'electric',chains:Math.max(2,chains-2),life:1.3,dmg:1}); }
+    player.cool = Math.max(0.08, 0.18 - lv*0.01);
   } else if(M==='fire'){
-    // fire balls with burn DoT
-    bullets.push({x:player.x-14,y:player.y-26,vx:rand(-30,30),vy:-560,r:9,from:'p',type:'fire',dmg:2,life:1.4,burnT:0});
-    bullets.push({x:player.x+14,y:player.y-26,vx:rand(-30,30),vy:-560,r:9,from:'p',type:'fire',dmg:2,life:1.4,burnT:0});
-    player.cool = 0.13;
+    const sz = 9 + Math.min(8,lv);
+    bullets.push({x:player.x-14,y:player.y-26,vx:rand(-30,30),vy:-560,r:sz,from:'p',type:'fire',dmg:2+Math.floor(lv/2),life:1.4,burnT:0});
+    bullets.push({x:player.x+14,y:player.y-26,vx:rand(-30,30),vy:-560,r:sz,from:'p',type:'fire',dmg:2+Math.floor(lv/2),life:1.4,burnT:0});
+    if(lv>=3) bullets.push({x:player.x,y:player.y-30,vx:0,vy:-580,r:sz+2,from:'p',type:'fire',dmg:3+Math.floor(lv/2),life:1.4,burnT:0});
+    if(lv>=6){ bullets.push({x:player.x-26,y:player.y-10,vx:-180,vy:-520,r:sz,from:'p',type:'fire',dmg:2,life:1.2}); bullets.push({x:player.x+26,y:player.y-10,vx:180,vy:-520,r:sz,from:'p',type:'fire',dmg:2,life:1.2}); }
+    player.cool = Math.max(0.08, 0.14 - lv*0.005);
   } else if(M==='homing'){
-    // homing missiles — track nearest enemy
-    bullets.push({x:player.x-12,y:player.y-26,vx:rand(-60,60),vy:-360,r:6,from:'p',type:'homing',life:2.5,turn:6});
-    bullets.push({x:player.x+12,y:player.y-26,vx:rand(-60,60),vy:-360,r:6,from:'p',type:'homing',life:2.5,turn:6});
-    player.cool = 0.18;
+    // 1 missile at lv1, +1 per 2 levels (max 6)
+    const num = Math.min(6, 1 + Math.floor(lv/2)+1);
+    for(let i=0;i<num;i++){
+      const off = (i - (num-1)/2) * 14;
+      bullets.push({x:player.x+off,y:player.y-26,vx:rand(-80,80),vy:-360,r:6,from:'p',type:'homing',life:2.8,turn:5+lv*0.3,dmg:1+Math.floor(lv/3)});
+    }
+    player.cool = Math.max(0.10, 0.20 - lv*0.01);
+  } else if(M==='flame'){
+    // flamethrower: spray cone of small fire particles each frame; "shoot" cooldown gates rate
+    const range = 220 + lv*20;
+    const spread = 0.55 - Math.min(0.25,lv*0.02);
+    const count = 6 + Math.min(8,lv);
+    for(let i=0;i<count;i++){
+      const a = -Math.PI/2 + rand(-spread,spread);
+      const sp = range + rand(-30,30);
+      bullets.push({x:player.x+rand(-12,12),y:player.y-26,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:8+rand(0,4),from:'p',type:'flame',life:0.45+rand(0,0.15),dmg:1});
+    }
+    player.cool = 0.05;
   } else {
     bullets.push({x:player.x-12,y:player.y-30,vx:0,vy:-600,r:5,from:'p',type:'normal'});
     bullets.push({x:player.x+12,y:player.y-30,vx:0,vy:-600,r:5,from:'p',type:'normal'});
     player.cool = 0.16;
   }
-  sfxShoot();
+  if(M!=='flame') sfxShoot();
+  else if(Math.random()<0.4) beep(220+Math.random()*60,0.06,'sawtooth',0.025);
 }
 
 function fireBomb(){
@@ -871,23 +1065,29 @@ function pickupItem(it){
   sfxItem();
   const T = it.type;
   if(T==='heal'){ if(state.hp<state.maxHp){ state.hp+=1; } else { state.maxHp+=1; state.hp=state.maxHp; } $('hp').textContent=state.hp; toast('❤️ +1 HP'); }
-  else if(T==='shield'){ player.shield = 8; toast('🛡 방패 8초'); sfxPower(); }
-  else if(T==='magnet'){ player.magnet = 12; toast('🧲 자석 12초'); sfxPower(); }
-  else if(T==='bomb'){ player.bombs = Math.min(3, player.bombs+1); toast('💣 폭탄 +1 ('+player.bombs+'/3)'); sfxPower(); }
+  else if(T==='shield'){ player.shieldLv = Math.min(MAX_LV, player.shieldLv+1); toast('🛡 방패 Lv '+player.shieldLv); sfxPower(); }
+  else if(T==='magnet'){ player.magnetLv = Math.min(MAX_LV, player.magnetLv+1); toast('🧲 자석 Lv '+player.magnetLv); sfxPower(); }
+  else if(T==='bomb'){ player.bombs = Math.min(MAX_LV, player.bombs+1); toast('💣 폭탄 +1 ('+player.bombs+'/'+MAX_LV+')'); sfxPower(); }
   else if(ATTACK_TYPES.indexOf(T)>=0){
-    player.attackMode = T;
-    player.attackT = 12;
-    toast(ITEM_TYPES[T].emoji+' '+ITEM_TYPES[T].label+' 12초');
+    if(player.attackMode===T){
+      player.attackLv[T] = Math.min(MAX_LV, (player.attackLv[T]||0)+1);
+    } else {
+      // switch mode; preserve other mode levels but use this one's stored level (or start at 1)
+      player.attackMode = T;
+      player.attackLv[T] = Math.min(MAX_LV, (player.attackLv[T]||0)+1);
+    }
+    toast(ITEM_TYPES[T].emoji+' '+ITEM_TYPES[T].label+' Lv '+player.attackLv[T]);
     sfxPower();
   }
   updatePowerupUI();
 }
 function updatePowerupUI(){
   const arr=[];
-  if(player.attackMode!=='normal' && player.attackT>0)
-    arr.push(`${ITEM_TYPES[player.attackMode].emoji} ${ATTACK_LABEL[player.attackMode]} ${player.attackT.toFixed(1)}s`);
-  if(player.shield>0) arr.push(`🛡 ${player.shield.toFixed(1)}s`);
-  if(player.magnet>0) arr.push(`🧲 ${player.magnet.toFixed(1)}s`);
+  const M=player.attackMode;
+  if(M!=='normal' && player.attackLv[M]>0)
+    arr.push(`${ITEM_TYPES[M].emoji} ${ATTACK_LABEL[M]} Lv${player.attackLv[M]}`);
+  if(player.shieldLv>0) arr.push(`🛡 Lv${player.shieldLv}`);
+  if(player.magnetLv>0) arr.push(`🧲 Lv${player.magnetLv}`);
   $('powerups').innerHTML = arr.map(s=>`<div class="pu">${s}</div>`).join('');
   const bb=$('bombBtn'); if(bb){ $('bombCnt').textContent = player.bombs; bb.disabled = player.bombs<=0; }
 }
@@ -919,9 +1119,6 @@ function loop(ts){
   player.inv = Math.max(0, player.inv - 1);
   // powerup timers
   if(player.bombFlash>0) player.bombFlash = Math.max(0, player.bombFlash-dt);
-  if(player.shield>0) player.shield = Math.max(0, player.shield-dt);
-  if(player.magnet>0) player.magnet = Math.max(0, player.magnet-dt);
-  if(player.attackT>0){ player.attackT = Math.max(0, player.attackT-dt); if(player.attackT===0) player.attackMode='normal'; }
   state.shake = Math.max(0, state.shake-dt*60);
   if(state.comboTimer>0){ state.comboTimer-=dt; if(state.comboTimer<=0){ state.combo=0; $('combo').style.display='none'; } }
   updatePowerupUI();
@@ -984,9 +1181,11 @@ function loop(ts){
             if(big){
               state.bossActive=false; state.lv++; state.bossSpawnAt = state.score + 30 + state.lv*15;
               $('lv').textContent=state.lv; toast('LEVEL UP! Lv '+state.lv);
-              bgmMode='normal'; bgmSwitch('normal');
-              // boss drops items
-              for(let k=0;k<3;k++) items.push({x:e.x+rand(-30,30),y:e.y+rand(-20,20),vy:50,type:Object.keys(ITEM_TYPES)[Math.floor(Math.random()*5)],phase:Math.random()*6});
+              nextBg(); // change background after boss
+              bgmSwitch(bgmForLevel(state.lv, false));
+              // boss drops items (more variety, includes flame)
+              const allTypes = Object.keys(ITEM_TYPES);
+              for(let k=0;k<5;k++) items.push({x:e.x+rand(-50,50),y:e.y+rand(-30,30),vy:50,type:allTypes[Math.floor(Math.random()*allTypes.length)],phase:Math.random()*6});
             } else {
               maybeDropItem(e.x,e.y);
             }
@@ -998,10 +1197,10 @@ function loop(ts){
       }
     } else {
       // enemy bullet hits player
-      if(player.shield>0){
+      if(player.shieldLv>0){
         if(Math.abs(b.x-player.x)<26 && Math.abs(b.y-player.y)<26){
           bullets.splice(i,1); ringFx(b.x,b.y,'#7af');
-          player.shield--; updatePowerupUI();
+          player.shieldLv--; updatePowerupUI();
         }
       } else if(player.inv<=0 && Math.abs(b.x-player.x)<26 && Math.abs(b.y-player.y)<26){
         bullets.splice(i,1); hitPlayer();
@@ -1030,9 +1229,9 @@ function loop(ts){
     }
     // collide with player
     if(player.inv<=0 && Math.abs(e.x-player.x)<(e.w+player.w*0.6)/2 && Math.abs(e.y-player.y)<(e.h+player.h*0.6)/2){
-      if(player.shield>0){
-        if(e.kind!=='boss'){ explode(e.x,e.y,16,'#7af'); sfxBoom(); enemies.splice(i,1); state.shake=8; player.shield--; updatePowerupUI(); continue; }
-        else { e.hp -= 5; player.shield = Math.max(0, player.shield-2); updatePowerupUI(); }
+      if(player.shieldLv>0){
+        if(e.kind!=='boss'){ explode(e.x,e.y,16,'#7af'); sfxBoom(); enemies.splice(i,1); state.shake=8; player.shieldLv--; updatePowerupUI(); continue; }
+        else { e.hp -= 5; player.shieldLv = Math.max(0, player.shieldLv-2); updatePowerupUI(); }
       } else {
         hitPlayer();
         if(e.kind!=='boss'){ explode(e.x,e.y,12,'#fc4'); sfxBoom(); enemies.splice(i,1); }
@@ -1043,9 +1242,11 @@ function loop(ts){
   // items
   for(let i=items.length-1;i>=0;i--){
     const it=items[i];
-    if(player.magnet>0){
+    if(player.magnetLv>0){
+      const radius = 200 + player.magnetLv*60;
+      const speed = 160 + player.magnetLv*40;
       const dx=player.x-it.x, dy=player.y-it.y, d=Math.hypot(dx,dy);
-      if(d<400){ it.x += dx/d*240*dt; it.y += dy/d*240*dt; }
+      if(d<radius){ it.x += dx/d*speed*dt; it.y += dy/d*speed*dt; }
     }
     it.y += it.vy*dt;
     if(Math.abs(it.x-player.x)<player.w*0.5 && Math.abs(it.y-player.y)<player.h*0.5){
@@ -1110,6 +1311,18 @@ function render(){
       g.addColorStop(0,'#fff7c0'); g.addColorStop(0.5,'#ff8a30'); g.addColorStop(1,'rgba(180,40,10,0)');
       ctx.fillStyle=g;
       ctx.beginPath(); ctx.arc(b.x,b.y,b.r*1.6,0,Math.PI*2); ctx.fill();
+    } else if(b.type==='flame'){
+      ctx.shadowBlur=14; ctx.shadowColor='#fc4';
+      const a = Math.max(0, (b.life||0)*1.8);
+      ctx.globalAlpha = Math.min(1, a);
+      const g=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r*1.5);
+      g.addColorStop(0,'#fff7c0');
+      g.addColorStop(0.4,'#ffaa20');
+      g.addColorStop(0.8,'rgba(220,60,20,0.6)');
+      g.addColorStop(1,'rgba(140,20,10,0)');
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r*1.5,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=1;
     } else if(b.type==='homing'){
       ctx.shadowBlur=14; ctx.shadowColor='#fa5';
       const ang=Math.atan2(b.vy,b.vx);
