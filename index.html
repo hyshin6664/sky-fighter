@@ -27,12 +27,17 @@
   #menu .preview .box img{max-width:100%;max-height:100%}
   #hi{font-size:13px;opacity:.85}
   input[type=file]{display:none}
-  #stick{position:fixed;right:24px;bottom:24px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.10);border:2px solid rgba(255,255,255,.25);z-index:6;display:none;touch-action:none;backdrop-filter:blur(4px)}
-  #stick .knob{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:50%;background:rgba(255,255,255,.5);border:2px solid rgba(255,255,255,.8);box-shadow:0 4px 14px rgba(0,0,0,.5)}
+  #stick{position:fixed;right:24px;bottom:24px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.35);z-index:6;display:none;touch-action:none;backdrop-filter:blur(4px)}
+  #stick .knob{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:50%;background:rgba(255,255,255,.5);border:2px solid rgba(255,255,255,.8);box-shadow:0 4px 14px rgba(0,0,0,.5);pointer-events:none}
+  #bombBtn{position:fixed;left:24px;bottom:24px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#ff7a3d,#a02020);border:3px solid rgba(255,255,255,.5);color:#fff;font-size:34px;font-weight:900;z-index:6;cursor:pointer;display:none;touch-action:manipulation;box-shadow:0 6px 18px rgba(255,80,40,.5),0 0 24px rgba(255,150,50,.6)}
+  #bombBtn:active{transform:scale(.92)}
+  #bombBtn:disabled{background:radial-gradient(circle at 30% 30%,#555,#222);border-color:rgba(255,255,255,.2);box-shadow:none;opacity:.6}
+  #bombBtn .cnt{position:absolute;right:-4px;top:-4px;background:#000;color:#ffd84a;font-size:14px;width:24px;height:24px;border-radius:12px;display:flex;align-items:center;justify-content:center;border:2px solid #ffd84a}
   #pause{position:fixed;right:8px;top:34px;background:rgba(0,0,0,.5);color:#fff;border:1px solid rgba(255,255,255,.2);padding:6px 12px;border-radius:8px;font-weight:700;z-index:5;cursor:pointer;display:none;touch-action:manipulation}
   #toast{position:fixed;left:50%;top:30%;transform:translate(-50%,-50%);background:rgba(0,0,0,.7);padding:14px 22px;border-radius:12px;font-size:18px;font-weight:700;z-index:7;display:none;text-align:center;box-shadow:0 0 30px rgba(255,180,80,.4);border:1px solid rgba(255,200,100,.3)}
   #footer{position:fixed;right:8px;bottom:6px;font-size:10px;opacity:.5;z-index:4;pointer-events:none}
-  @media (hover:hover){#stick{display:none!important}}
+  /* show joystick & bomb button on touch devices regardless of hover capability */
+  @media (pointer:coarse){#stick.show, #bombBtn.show{display:block!important}}
 </style>
 </head>
 <body>
@@ -44,9 +49,10 @@
   </div>
   <div id="powerups"></div>
   <div id="combo"></div>
-  <div id="ver" title="버전">v2.6.0</div>
+  <div id="ver" title="버전">v3.0.0</div>
   <button id="pause" aria-label="일시정지">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
+  <button id="bombBtn" aria-label="폭탄 사용">💣<span class="cnt" id="bombCnt">0</span></button>
   <div id="toast"></div>
   <div id="footer">CDN &amp; Cloud is by Solbox.. · Sprites: Kenney.nl (CC0), Skorpio &amp; wuhu (CC-BY-SA)</div>
 
@@ -66,9 +72,10 @@
     </div>
     <button id="start" class="primary">▶ START</button>
     <div class="small">
-      ← ↑ → ↓ 이동 · 미사일 자동발사<br>
-      📱 우측하단 조이스틱 · 아이템 먹으면 강해져요<br>
-      🛡 방패(중첩) · 🔫 멀티샷(레벨업) · 💣 폭탄 · ❤️ 회복 · 🧲 자석(레벨업)<br>아이템은 시간 제한 없이 영구 누적!
+      ← ↑ → ↓ 이동 · 미사일 자동발사 · <b>SPACE = 폭탄</b><br>
+      📱 우측하단 조이스틱 · 좌측하단 폭탄 버튼<br>
+      🔫 멀티샷 · ⚡ 전기 · 🔥 화염 · 🎯 유도탄 · 🛡 방패 · ❤️ 회복 · 🧲 자석 · 💣 폭탄(저장)<br>
+      공격 아이템은 12초간 무기 교체!
     </div>
   </div>
 </div>
@@ -88,8 +95,8 @@ function resize(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
 }
 window.addEventListener('resize', resize); resize();
-const isTouch = matchMedia('(hover:none)').matches || 'ontouchstart' in window;
-if(isTouch){ $('stick').style.display='block'; }
+const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window || (navigator.maxTouchPoints||0) > 0;
+if(isTouch){ $('stick').classList.add('show'); $('bombBtn').classList.add('show'); $('stick').style.display='block'; $('bombBtn').style.display='block'; }
 
 const rand = (a,b)=>a+Math.random()*(b-a);
 
@@ -319,31 +326,59 @@ addEventListener('keydown', e=>{
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
   keys[e.key]=true;
   if(e.key==='p'||e.key==='P') togglePause();
-  if((e.key==='Enter'||e.key===' ') && !state.running && $('menu').style.display!=='none'){ $('start').click(); }
+  if(e.key==='Enter' && !state.running && $('menu').style.display!=='none'){ $('start').click(); }
+  else if(e.key===' ' && state.running && !state.paused){ fireBomb(); }
+  else if(e.key===' ' && !state.running && $('menu').style.display!=='none'){ $('start').click(); }
 });
 addEventListener('keyup', e=>{ keys[e.key]=false; });
 
 let stickVec = {x:0,y:0};
 (function(){
   const s=$('stick'), k=$('knob');
-  let active=false, cx=0, cy=0, R=70;
+  let stickTouchId=null, cx=0, cy=0, R=70;
   function setKnob(dx,dy){
     const d=Math.hypot(dx,dy); const m=Math.min(d,R);
     const a=Math.atan2(dy,dx);
     const x=Math.cos(a)*m, y=Math.sin(a)*m;
     k.style.transform=`translate(${x}px,${y}px)`;
-    const n = m<R*0.12 ? 0 : (m-R*0.12)/(R-R*0.12); // dead zone
+    const n = m<R*0.12 ? 0 : (m-R*0.12)/(R-R*0.12);
     stickVec.x=Math.cos(a)*n; stickVec.y=Math.sin(a)*n;
   }
-  function start(t){ const r=s.getBoundingClientRect(); cx=r.left+r.width/2; cy=r.top+r.height/2; active=true; move(t); }
-  function move(t){ if(!active) return; setKnob(t.clientX-cx, t.clientY-cy); }
-  function end(){ active=false; setKnob(0,0); }
-  s.addEventListener('touchstart',e=>{e.preventDefault();start(e.touches[0]);},{passive:false});
-  s.addEventListener('touchmove', e=>{e.preventDefault();move(e.touches[0]);},{passive:false});
-  s.addEventListener('touchend',  e=>{e.preventDefault();end();},{passive:false});
-  s.addEventListener('mousedown',e=>{start(e);});
-  addEventListener('mousemove',e=>{ if(active) move(e); });
-  addEventListener('mouseup', end);
+  function startAt(clientX, clientY){
+    const r=s.getBoundingClientRect(); cx=r.left+r.width/2; cy=r.top+r.height/2;
+    setKnob(clientX-cx, clientY-cy);
+  }
+  function endStick(){ stickTouchId=null; setKnob(0,0); }
+  // multi-touch aware: track our touch by identifier so bomb button doesn't steal it
+  s.addEventListener('touchstart', e=>{
+    e.preventDefault();
+    if(stickTouchId===null){
+      const t = e.changedTouches[0];
+      stickTouchId = t.identifier;
+      startAt(t.clientX, t.clientY);
+    }
+  }, {passive:false});
+  window.addEventListener('touchmove', e=>{
+    if(stickTouchId===null) return;
+    for(const t of e.changedTouches){
+      if(t.identifier===stickTouchId){ e.preventDefault(); setKnob(t.clientX-cx, t.clientY-cy); break; }
+    }
+  }, {passive:false});
+  window.addEventListener('touchend', e=>{
+    for(const t of e.changedTouches){
+      if(t.identifier===stickTouchId){ endStick(); break; }
+    }
+  }, {passive:false});
+  window.addEventListener('touchcancel', e=>{
+    for(const t of e.changedTouches){
+      if(t.identifier===stickTouchId){ endStick(); break; }
+    }
+  }, {passive:false});
+  // mouse fallback
+  let mouseDown=false;
+  s.addEventListener('mousedown',e=>{ mouseDown=true; startAt(e.clientX,e.clientY); });
+  window.addEventListener('mousemove',e=>{ if(mouseDown) setKnob(e.clientX-cx,e.clientY-cy); });
+  window.addEventListener('mouseup', ()=>{ if(mouseDown){ mouseDown=false; setKnob(0,0); } });
 })();
 
 // ========= state =========
@@ -355,14 +390,17 @@ const state = {
   spawnTimer:0
 };
 const player = { x:0, y:0, w:108, h:108, cool:0, inv:0,
-  shield:0, multiLv:0, magnetLv:0, bombFlash:0,
+  shield:0, magnet:0,
+  attackMode:'normal', attackT:0,  // attack modes: normal/multi/electric/fire/homing
+  bombs:0,                         // bomb inventory (max 3)
+  bombFlash:0,
   trail:[]
 };
 const bullets = [], enemies = [], items = [], fx = [], stars = [], clouds = [];
 
 function reset(){
   Object.assign(state,{running:true,paused:false,score:0,hp:3,lv:1,t:0,bossActive:false,bossSpawnAt:25,combo:0,comboTimer:0,shake:0,spawnTimer:0});
-  Object.assign(player,{x:W/2,y:H*0.78,cool:0,inv:90,shield:0,multiLv:0,magnetLv:0,bombFlash:0,trail:[]});
+  Object.assign(player,{x:W/2,y:H*0.78,cool:0,inv:90,shield:0,magnet:0,attackMode:'normal',attackT:0,bombs:1,bombFlash:0,trail:[]});
   bullets.length=0; enemies.length=0; items.length=0; fx.length=0; clouds.length=0; stars.length=0;
   // clouds disabled (space background)
   for(let i=0;i<60;i++) stars.push({x:Math.random()*W,y:Math.random()*H,z:Math.random()*1+0.3,r:Math.random()*1.4+0.4});
@@ -652,12 +690,17 @@ function drawEnemy(e){
 }
 
 const ITEM_TYPES = {
-  shield:  {color:'#7af', emoji:'🛡', label:'방패'},
-  multi:   {color:'#ff7', emoji:'🔫', label:'멀티샷'},
-  bomb:    {color:'#f77', emoji:'💣', label:'폭탄'},
-  heal:    {color:'#f7a', emoji:'❤️', label:'회복'},
-  magnet:  {color:'#7fa', emoji:'🧲', label:'자석'}
+  shield:   {color:'#7af', emoji:'🛡', label:'방패'},
+  multi:    {color:'#ff7', emoji:'🔫', label:'멀티샷'},
+  electric: {color:'#9af', emoji:'⚡', label:'전기'},
+  fire:     {color:'#f73', emoji:'🔥', label:'화염'},
+  homing:   {color:'#fa7', emoji:'🎯', label:'유도탄'},
+  bomb:     {color:'#f77', emoji:'💣', label:'폭탄'},
+  heal:     {color:'#f7a', emoji:'❤️', label:'회복'},
+  magnet:   {color:'#7fa', emoji:'🧲', label:'자석'}
 };
+const ATTACK_TYPES = ['multi','electric','fire','homing'];
+const ATTACK_LABEL = {multi:'멀티샷',electric:'전기',fire:'화염',homing:'유도탄',normal:''};
 function drawItem(it){
   ctx.save(); ctx.translate(it.x,it.y);
   const t=state.t;
@@ -750,20 +793,48 @@ function maybeDropItem(x,y){
 
 function shoot(){
   if(player.cool>0) return;
-  const lv = player.multiLv;
-  // base 2 forward bullets, +2 per level (angled), max useful ~Lv8
-  bullets.push({x:player.x-12,y:player.y-30,vx:0,vy:-600,r:5,from:'p'});
-  bullets.push({x:player.x+12,y:player.y-30,vx:0,vy:-600,r:5,from:'p'});
-  for(let i=1;i<=Math.min(lv,8);i++){
-    const angle = i*0.10;
-    const speed = 600;
-    bullets.push({x:player.x-14-i*4,y:player.y-20,vx:-Math.sin(angle)*speed,vy:-Math.cos(angle)*speed,r:5,from:'p'});
-    bullets.push({x:player.x+14+i*4,y:player.y-20,vx: Math.sin(angle)*speed,vy:-Math.cos(angle)*speed,r:5,from:'p'});
+  const M = player.attackMode;
+  if(M==='multi'){
+    bullets.push({x:player.x-12,y:player.y-30,vx:0,vy:-620,r:5,from:'p',type:'normal'});
+    bullets.push({x:player.x+12,y:player.y-30,vx:0,vy:-620,r:5,from:'p',type:'normal'});
+    bullets.push({x:player.x-22,y:player.y-15,vx:-150,vy:-580,r:5,from:'p',type:'normal'});
+    bullets.push({x:player.x+22,y:player.y-15,vx: 150,vy:-580,r:5,from:'p',type:'normal'});
+    bullets.push({x:player.x-30,y:player.y-5,vx:-260,vy:-520,r:5,from:'p',type:'normal'});
+    bullets.push({x:player.x+30,y:player.y-5,vx: 260,vy:-520,r:5,from:'p',type:'normal'});
+    player.cool = 0.10;
+  } else if(M==='electric'){
+    // chain lightning bolt — single shot that arcs to nearest enemies
+    bullets.push({x:player.x,y:player.y-30,vx:0,vy:-700,r:7,from:'p',type:'electric',chains:3,life:1.5});
+    player.cool = 0.18;
+  } else if(M==='fire'){
+    // fire balls with burn DoT
+    bullets.push({x:player.x-14,y:player.y-26,vx:rand(-30,30),vy:-560,r:9,from:'p',type:'fire',dmg:2,life:1.4,burnT:0});
+    bullets.push({x:player.x+14,y:player.y-26,vx:rand(-30,30),vy:-560,r:9,from:'p',type:'fire',dmg:2,life:1.4,burnT:0});
+    player.cool = 0.13;
+  } else if(M==='homing'){
+    // homing missiles — track nearest enemy
+    bullets.push({x:player.x-12,y:player.y-26,vx:rand(-60,60),vy:-360,r:6,from:'p',type:'homing',life:2.5,turn:6});
+    bullets.push({x:player.x+12,y:player.y-26,vx:rand(-60,60),vy:-360,r:6,from:'p',type:'homing',life:2.5,turn:6});
+    player.cool = 0.18;
+  } else {
+    bullets.push({x:player.x-12,y:player.y-30,vx:0,vy:-600,r:5,from:'p',type:'normal'});
+    bullets.push({x:player.x+12,y:player.y-30,vx:0,vy:-600,r:5,from:'p',type:'normal'});
+    player.cool = 0.16;
   }
-  // backward shots at higher levels
-  if(lv>=5){ bullets.push({x:player.x-10,y:player.y+20,vx:0,vy:520,r:5,from:'p'}); bullets.push({x:player.x+10,y:player.y+20,vx:0,vy:520,r:5,from:'p'}); }
-  player.cool = Math.max(0.07, 0.16 - lv*0.01);
   sfxShoot();
+}
+
+function fireBomb(){
+  if(player.bombs<=0 || !state.running || state.paused) return;
+  player.bombs--;
+  toast('💣 BOMB!'); sfxBoom(true); state.shake=22; player.bombFlash=0.5;
+  if(navigator.vibrate) navigator.vibrate([60,40,80]);
+  for(const en of enemies){
+    if(en.kind!=='boss'){ explode(en.x,en.y,16,'#fc4'); en.hp=0; }
+    else { en.hp -= 10; }
+  }
+  for(let i=bullets.length-1;i>=0;i--) if(bullets[i].from==='e') bullets.splice(i,1);
+  updatePowerupUI();
 }
 function enemyShoot(e){
   if(e.kind==='boss'){
@@ -799,26 +870,26 @@ function toast(msg, ms){
 function pickupItem(it){
   sfxItem();
   const T = it.type;
-  if(T==='heal'){ state.maxHp = Math.max(state.maxHp, state.hp+1); state.hp += 1; $('hp').textContent=state.hp; toast('❤️ +1 HP'); }
-  else if(T==='shield'){ player.shield += 3; toast('🛡 방패 +3 ('+player.shield+')'); sfxPower(); }
-  else if(T==='multi'){ player.multiLv += 1; toast('🔫 멀티샷 Lv '+player.multiLv); sfxPower(); }
-  else if(T==='magnet'){ player.magnetLv += 1; toast('🧲 자석 Lv '+player.magnetLv); sfxPower(); }
-  else if(T==='bomb'){
-    toast('💣 BOMB!'); sfxBoom(true); state.shake=20; player.bombFlash=0.4;
-    for(const en of enemies){
-      if(en.kind!=='boss'){ explode(en.x,en.y,12,'#fc4'); en.hp=0; }
-      else { en.hp -= 8; }
-    }
-    for(let i=bullets.length-1;i>=0;i--) if(bullets[i].from==='e') bullets.splice(i,1);
+  if(T==='heal'){ if(state.hp<state.maxHp){ state.hp+=1; } else { state.maxHp+=1; state.hp=state.maxHp; } $('hp').textContent=state.hp; toast('❤️ +1 HP'); }
+  else if(T==='shield'){ player.shield = 8; toast('🛡 방패 8초'); sfxPower(); }
+  else if(T==='magnet'){ player.magnet = 12; toast('🧲 자석 12초'); sfxPower(); }
+  else if(T==='bomb'){ player.bombs = Math.min(3, player.bombs+1); toast('💣 폭탄 +1 ('+player.bombs+'/3)'); sfxPower(); }
+  else if(ATTACK_TYPES.indexOf(T)>=0){
+    player.attackMode = T;
+    player.attackT = 12;
+    toast(ITEM_TYPES[T].emoji+' '+ITEM_TYPES[T].label+' 12초');
+    sfxPower();
   }
   updatePowerupUI();
 }
 function updatePowerupUI(){
   const arr=[];
-  if(player.shield>0) arr.push(`🛡 ×${player.shield}`);
-  if(player.multiLv>0) arr.push(`🔫 Lv${player.multiLv}`);
-  if(player.magnetLv>0) arr.push(`🧲 Lv${player.magnetLv}`);
+  if(player.attackMode!=='normal' && player.attackT>0)
+    arr.push(`${ITEM_TYPES[player.attackMode].emoji} ${ATTACK_LABEL[player.attackMode]} ${player.attackT.toFixed(1)}s`);
+  if(player.shield>0) arr.push(`🛡 ${player.shield.toFixed(1)}s`);
+  if(player.magnet>0) arr.push(`🧲 ${player.magnet.toFixed(1)}s`);
   $('powerups').innerHTML = arr.map(s=>`<div class="pu">${s}</div>`).join('');
+  const bb=$('bombBtn'); if(bb){ $('bombCnt').textContent = player.bombs; bb.disabled = player.bombs<=0; }
 }
 
 // ========= loop =========
@@ -848,6 +919,9 @@ function loop(ts){
   player.inv = Math.max(0, player.inv - 1);
   // powerup timers
   if(player.bombFlash>0) player.bombFlash = Math.max(0, player.bombFlash-dt);
+  if(player.shield>0) player.shield = Math.max(0, player.shield-dt);
+  if(player.magnet>0) player.magnet = Math.max(0, player.magnet-dt);
+  if(player.attackT>0){ player.attackT = Math.max(0, player.attackT-dt); if(player.attackT===0) player.attackMode='normal'; }
   state.shake = Math.max(0, state.shake-dt*60);
   if(state.comboTimer>0){ state.comboTimer-=dt; if(state.comboTimer<=0){ state.combo=0; $('combo').style.display='none'; } }
   updatePowerupUI();
@@ -862,13 +936,42 @@ function loop(ts){
 
   // bullets
   for(let i=bullets.length-1;i>=0;i--){
-    const b=bullets[i]; b.x+=b.vx*dt; b.y+=b.vy*dt;
-    if(b.y<-30||b.y>H+30||b.x<-30||b.x>W+30){ bullets.splice(i,1); continue; }
+    const b=bullets[i];
+    // homing turn
+    if(b.from==='p' && b.type==='homing'){
+      let best=null,bd=1e9;
+      for(const e of enemies){ const dx=e.x-b.x, dy=e.y-b.y; const d=Math.hypot(dx,dy); if(d<bd){ bd=d; best={dx,dy,d}; } }
+      if(best && best.d>0){
+        const tx=best.dx/best.d, ty=best.dy/best.d;
+        const sp=Math.hypot(b.vx,b.vy)||500;
+        const nvx=b.vx+tx*sp*dt*b.turn, nvy=b.vy+ty*sp*dt*b.turn;
+        const nm=Math.hypot(nvx,nvy)||1;
+        b.vx=nvx/nm*sp*1.02; b.vy=nvy/nm*sp*1.02;
+      }
+    }
+    b.x+=b.vx*dt; b.y+=b.vy*dt;
+    if(b.life!==undefined){ b.life-=dt; if(b.life<=0){ bullets.splice(i,1); continue; } }
+    if(b.y<-50||b.y>H+50||b.x<-50||b.x>W+50){ bullets.splice(i,1); continue; }
     if(b.from==='p'){
       for(let j=enemies.length-1;j>=0;j--){
         const e=enemies[j];
         if(Math.abs(b.x-e.x)<e.w/2 && Math.abs(b.y-e.y)<e.h/2){
-          e.hp--; bullets.splice(i,1);
+          const dmg = b.dmg||1;
+          e.hp -= dmg;
+          // electric chain
+          if(b.type==='electric' && b.chains>0){
+            b.chains--;
+            // find next nearest enemy and create lightning fx
+            let next=null,nd=1e9;
+            for(const e2 of enemies){ if(e2===e) continue; const d=Math.hypot(e2.x-e.x,e2.y-e.y); if(d<nd && d<260){ nd=d; next=e2; } }
+            if(next){
+              fx.push({lightning:true, x1:e.x, y1:e.y, x2:next.x, y2:next.y, life:0.25, col:'#aef'});
+              bullets.push({x:e.x,y:e.y,vx:(next.x-e.x)/0.05,vy:(next.y-e.y)/0.05,r:5,from:'p',type:'electric',chains:b.chains,life:0.06});
+            }
+          }
+          // fire doesn't pierce; normal/multi remove on hit; homing too
+          if(b.type!=='fire') bullets.splice(i,1);
+          else { b.life = Math.min(b.life||0, 0.05); } // burnup
           ringFx(b.x,b.y,'#ff0');
           if(e.hp<=0){
             const big = e.kind==='boss';
@@ -940,11 +1043,9 @@ function loop(ts){
   // items
   for(let i=items.length-1;i>=0;i--){
     const it=items[i];
-    if(player.magnetLv>0){
-      const radius = 250 + player.magnetLv*120;
-      const speed = 180 + player.magnetLv*60;
+    if(player.magnet>0){
       const dx=player.x-it.x, dy=player.y-it.y, d=Math.hypot(dx,dy);
-      if(d<radius){ it.x += dx/d*speed*dt; it.y += dy/d*speed*dt; }
+      if(d<400){ it.x += dx/d*240*dt; it.y += dy/d*240*dt; }
     }
     it.y += it.vy*dt;
     if(Math.abs(it.x-player.x)<player.w*0.5 && Math.abs(it.y-player.y)<player.h*0.5){
@@ -957,6 +1058,7 @@ function loop(ts){
   for(let i=fx.length-1;i>=0;i--){
     const p=fx[i]; p.life-=dt;
     if(p.ring){ p.r += 200*dt; }
+    else if(p.lightning){ /* static positions, just fades */ }
     else { p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.96; p.vy*=0.96; }
     if(p.life<=0) fx.splice(i,1);
   }
@@ -991,14 +1093,35 @@ function render(){
   for(const it of items) drawItem(it);
   // bullets
   for(const b of bullets){
-    if(b.from==='p'){
-      ctx.shadowBlur=10; ctx.shadowColor='#ff0';
+    if(b.from==='e'){
+      ctx.shadowBlur=8; ctx.shadowColor='#f44'; ctx.fillStyle='#ff5050';
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
+    } else if(b.type==='electric'){
+      ctx.shadowBlur=18; ctx.shadowColor='#9cf'; ctx.fillStyle='#dff';
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
+      // jagged tail
+      ctx.strokeStyle='#9cf'; ctx.lineWidth=2;
+      ctx.beginPath();
+      for(let k=0;k<5;k++){ const t=k/4; const yy=b.y+t*22; const xx=b.x+(Math.random()-0.5)*8; if(k===0) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); }
+      ctx.stroke();
+    } else if(b.type==='fire'){
+      ctx.shadowBlur=20; ctx.shadowColor='#f73';
+      const g=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r*1.6);
+      g.addColorStop(0,'#fff7c0'); g.addColorStop(0.5,'#ff8a30'); g.addColorStop(1,'rgba(180,40,10,0)');
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r*1.6,0,Math.PI*2); ctx.fill();
+    } else if(b.type==='homing'){
+      ctx.shadowBlur=14; ctx.shadowColor='#fa5';
+      const ang=Math.atan2(b.vy,b.vx);
+      ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(ang+Math.PI/2);
       ctx.fillStyle='#ffe14a';
+      ctx.beginPath(); ctx.moveTo(0,-9); ctx.lineTo(5,5); ctx.lineTo(-5,5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#ff7a3d'; ctx.fillRect(-2,5,4,5);
+      ctx.restore();
     } else {
-      ctx.shadowBlur=8; ctx.shadowColor='#f44';
-      ctx.fillStyle='#ff5050';
+      ctx.shadowBlur=10; ctx.shadowColor='#ff0'; ctx.fillStyle='#ffe14a';
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
     }
-    ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
   }
   ctx.shadowBlur=0;
   for(const e of enemies) drawEnemy(e);
@@ -1009,6 +1132,17 @@ function render(){
       ctx.globalAlpha=Math.max(0,p.life*2);
       ctx.strokeStyle=p.col; ctx.lineWidth=2;
       ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.stroke();
+    } else if(p.lightning){
+      ctx.globalAlpha=Math.max(0,p.life*4);
+      ctx.shadowBlur=14; ctx.shadowColor='#9cf';
+      ctx.strokeStyle=p.col||'#aef'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(p.x1,p.y1);
+      const seg=6;
+      for(let s=1;s<=seg;s++){
+        const t=s/seg, x=p.x1+(p.x2-p.x1)*t+(Math.random()-0.5)*16, y=p.y1+(p.y2-p.y1)*t+(Math.random()-0.5)*16;
+        ctx.lineTo(x,y);
+      }
+      ctx.stroke(); ctx.shadowBlur=0;
     } else {
       ctx.globalAlpha=Math.max(0,p.life);
       ctx.fillStyle=p.col;
@@ -1032,6 +1166,8 @@ function togglePause(){
   if(state.paused) bgmStop(); else bgmStart();
 }
 $('pause').addEventListener('click', togglePause);
+$('bombBtn').addEventListener('click', e=>{ e.preventDefault(); fireBomb(); });
+$('bombBtn').addEventListener('touchstart', e=>{ e.preventDefault(); fireBomb(); }, {passive:false});
 $('start').addEventListener('click', ()=>{
   ac();
   $('menu').style.display='none';
