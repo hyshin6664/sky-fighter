@@ -44,7 +44,7 @@
   </div>
   <div id="powerups"></div>
   <div id="combo"></div>
-  <div id="ver" title="버전">v2.2.0</div>
+  <div id="ver" title="버전">v2.3.0</div>
   <button id="pause" aria-label="일시정지">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
   <div id="toast"></div>
@@ -139,31 +139,75 @@ function resizePngDataUrl(srcUrl, maxSide, cb){
     const c=document.createElement('canvas'); c.width=w; c.height=h;
     const cx=c.getContext('2d');
     cx.drawImage(im,0,0,w,h);
-    // auto background removal: sample 4 corners + 4 edge mids, take median, knock out similar pixels
+    // auto background removal: flood-fill from edges, only erase pixels CONNECTED to border
     try{
-      const samples=[
-        [0,0],[w-1,0],[0,h-1],[w-1,h-1],
-        [Math.floor(w/2),0],[Math.floor(w/2),h-1],[0,Math.floor(h/2)],[w-1,Math.floor(h/2)]
-      ];
+      const id=cx.getImageData(0,0,w,h);
+      const d=id.data;
+      const TOL=70; // perceived color distance threshold
+      // seed colors: scan all border pixels, take median RGB
       const cols=[];
-      for(const [sx,sy] of samples){
-        const p=cx.getImageData(sx,sy,1,1).data;
-        if(p[3]>240) cols.push([p[0],p[1],p[2]]);
+      for(let xx=0; xx<w; xx+=Math.max(1,Math.floor(w/40))){
+        const a=(xx)*4, b=((h-1)*w+xx)*4;
+        if(d[a+3]>240) cols.push([d[a],d[a+1],d[a+2]]);
+        if(d[b+3]>240) cols.push([d[b],d[b+1],d[b+2]]);
       }
-      if(cols.length>=3){
-        // median per channel
+      for(let yy=0; yy<h; yy+=Math.max(1,Math.floor(h/40))){
+        const a=(yy*w)*4, b=(yy*w+w-1)*4;
+        if(d[a+3]>240) cols.push([d[a],d[a+1],d[a+2]]);
+        if(d[b+3]>240) cols.push([d[b],d[b+1],d[b+2]]);
+      }
+      if(cols.length>=4){
         const med=[0,1,2].map(k=>{ const a=cols.map(c=>c[k]).sort((x,y)=>x-y); return a[a.length>>1]; });
-        const TOL=46; // tolerance — works for solid/near-solid backgrounds
-        const id=cx.getImageData(0,0,w,h);
-        const d=id.data;
-        for(let i=0;i<d.length;i+=4){
+        // BFS from border
+        const visited=new Uint8Array(w*h);
+        const stack=[];
+        function similar(idx){
+          const i=idx*4;
           const dr=d[i]-med[0], dg=d[i+1]-med[1], db=d[i+2]-med[2];
-          const dist=Math.sqrt(dr*dr+dg*dg+db*db);
-          if(dist<TOL){
-            d[i+3]=0; // fully transparent
-          } else if(dist<TOL*1.6){
-            // soft edge
-            d[i+3]=Math.floor(d[i+3]*((dist-TOL)/(TOL*0.6)));
+          return Math.sqrt(dr*dr+dg*dg+db*db)<TOL;
+        }
+        function softness(idx){
+          const i=idx*4;
+          const dr=d[i]-med[0], dg=d[i+1]-med[1], db=d[i+2]-med[2];
+          return Math.sqrt(dr*dr+dg*dg+db*db);
+        }
+        for(let xx=0; xx<w; xx++){
+          let i=xx; if(similar(i)){ stack.push(i); visited[i]=1; }
+          i=(h-1)*w+xx; if(similar(i)){ stack.push(i); visited[i]=1; }
+        }
+        for(let yy=0; yy<h; yy++){
+          let i=yy*w; if(similar(i)){ stack.push(i); visited[i]=1; }
+          i=yy*w+w-1; if(similar(i)){ stack.push(i); visited[i]=1; }
+        }
+        while(stack.length){
+          const idx=stack.pop();
+          d[idx*4+3]=0; // erase
+          const x=idx%w, y=(idx/w)|0;
+          const n=[];
+          if(x>0) n.push(idx-1);
+          if(x<w-1) n.push(idx+1);
+          if(y>0) n.push(idx-w);
+          if(y<h-1) n.push(idx+w);
+          for(const ni of n){
+            if(!visited[ni] && similar(ni)){ visited[ni]=1; stack.push(ni); }
+          }
+        }
+        // soft edge: pixels near boundary that are partially similar — fade alpha
+        for(let idx=0; idx<w*h; idx++){
+          if(visited[idx]) continue;
+          const dist=softness(idx);
+          if(dist<TOL*1.5){
+            // check if any 4-neighbor was erased — if yes, fade
+            const x=idx%w, y=(idx/w)|0;
+            let touchesErased=false;
+            if(x>0 && visited[idx-1]) touchesErased=true;
+            else if(x<w-1 && visited[idx+1]) touchesErased=true;
+            else if(y>0 && visited[idx-w]) touchesErased=true;
+            else if(y<h-1 && visited[idx+w]) touchesErased=true;
+            if(touchesErased){
+              const t=Math.max(0,(dist-TOL)/(TOL*0.5));
+              d[idx*4+3]=Math.floor(d[idx*4+3]*t);
+            }
           }
         }
         cx.putImageData(id,0,0);
@@ -288,7 +332,7 @@ function reset(){
   Object.assign(state,{running:true,paused:false,score:0,hp:3,lv:1,t:0,bossActive:false,bossSpawnAt:25,combo:0,comboTimer:0,shake:0,spawnTimer:0});
   Object.assign(player,{x:W/2,y:H*0.78,cool:0,inv:90,shield:0,multi:0,magnet:0,bombFlash:0,trail:[]});
   bullets.length=0; enemies.length=0; items.length=0; fx.length=0; clouds.length=0; stars.length=0;
-  for(let i=0;i<14;i++) clouds.push(makeCloud(true));
+  // clouds disabled (space background)
   for(let i=0;i<60;i++) stars.push({x:Math.random()*W,y:Math.random()*H,z:Math.random()*1+0.3,r:Math.random()*1.4+0.4});
   bgmMode='normal';
   $('hp').textContent=state.hp; $('score').textContent=0; $('lv').textContent=1;
