@@ -38,8 +38,8 @@
     <div id="hudL">❤️ <span id="hp">3</span> &nbsp; ⭐ <span id="score">0</span></div>
     <div class="right" id="hudR">Lv <span id="lv">1</span></div>
   </div>
-  <div id="ver" title="버전">v1.0.0</div>
-  <button id="pause">II</button>
+  <div id="ver" title="버전">v1.1.0</div>
+  <button id="pause" aria-label="일시정지" style="touch-action:manipulation">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
   <div id="toast"></div>
   <div id="footer">CDN &amp; Cloud is by Solbox..</div>
@@ -101,11 +101,32 @@ function setPreview(){
   if(bgImg){ const im=new Image(); im.src=bgImg.src; b.appendChild(im); }
 }
 setPreview();
+function resizeDataUrl(srcUrl, maxSide, cb){
+  const im = new Image();
+  im.onload = ()=>{
+    let w=im.naturalWidth, h=im.naturalHeight;
+    const m=Math.max(w,h);
+    if(m>maxSide){ const s=maxSide/m; w=Math.round(w*s); h=Math.round(h*s); }
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    c.getContext('2d').drawImage(im,0,0,w,h);
+    let q=0.85, out=c.toDataURL('image/jpeg',q);
+    while(out.length>900*1024 && q>0.4){ q-=0.1; out=c.toDataURL('image/jpeg',q); }
+    cb(out);
+  };
+  im.onerror = ()=> cb(srcUrl);
+  im.src = srcUrl;
+}
 function readFile(f, key, setter){
   const r=new FileReader();
   r.onload=()=>{
-    try{ localStorage.setItem(key, r.result); }catch(e){ alert('이미지가 너무 커요. 더 작은 이미지를 사용해주세요.'); return; }
-    const im=new Image(); im.onload=()=>{ setter(im); setPreview(); }; im.src=r.result;
+    resizeDataUrl(r.result, 512, (data)=>{
+      try{ localStorage.setItem(key, data); }
+      catch(e){
+        try{ localStorage.removeItem(key); localStorage.setItem(key, data); }
+        catch(e2){ alert('저장 공간 부족 또는 시크릿 모드입니다. 그래도 이번 게임에는 사용해요.'); }
+      }
+      const im=new Image(); im.onload=()=>{ setter(im); setPreview(); }; im.src=data;
+    });
   };
   r.readAsDataURL(f);
 }
@@ -155,6 +176,11 @@ addEventListener('keydown', e=>{
   if(e.key==='p'||e.key==='P') togglePause();
 });
 addEventListener('keyup', e=>{ keys[e.key]=false; });
+addEventListener('keydown', e=>{
+  if((e.key==='Enter'||e.key===' ') && !state.running && $('menu').style.display!=='none'){
+    $('start').click();
+  }
+});
 
 // joystick
 let stickVec = {x:0,y:0};
@@ -318,6 +344,7 @@ function toast(msg, ms=1400){
 let last=0;
 function loop(ts){
   requestAnimationFrame(loop);
+  if(!last){ last=ts; return; }
   const dt=Math.min(0.033, (ts-last)/1000 || 0); last=ts;
   if(!state.running || state.paused){ render(); return; }
   state.t += dt;
@@ -458,8 +485,16 @@ function togglePause(){
   if(!state.running) return;
   state.paused=!state.paused;
   $('pause').textContent = state.paused? '▶' : 'II';
+  const a=ac(); if(a && a.state==='suspended') a.resume();
   if(state.paused) bgmStop(); else bgmStart();
 }
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){ bgmStop(); }
+  else if(state.running && !state.paused){
+    const a=ac(); if(a && a.state==='suspended') a.resume();
+    bgmStart();
+  }
+});
 $('pause').addEventListener('click', togglePause);
 $('start').addEventListener('click', ()=>{
   ac(); // unlock audio
