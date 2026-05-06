@@ -44,7 +44,7 @@
   </div>
   <div id="powerups"></div>
   <div id="combo"></div>
-  <div id="ver" title="버전">v2.0.0</div>
+  <div id="ver" title="버전">v2.2.0</div>
   <button id="pause" aria-label="일시정지">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
   <div id="toast"></div>
@@ -137,7 +137,38 @@ function resizePngDataUrl(srcUrl, maxSide, cb){
     const m=Math.max(w,h);
     if(m>maxSide){ const s=maxSide/m; w=Math.round(w*s); h=Math.round(h*s); }
     const c=document.createElement('canvas'); c.width=w; c.height=h;
-    c.getContext('2d').drawImage(im,0,0,w,h);
+    const cx=c.getContext('2d');
+    cx.drawImage(im,0,0,w,h);
+    // auto background removal: sample 4 corners + 4 edge mids, take median, knock out similar pixels
+    try{
+      const samples=[
+        [0,0],[w-1,0],[0,h-1],[w-1,h-1],
+        [Math.floor(w/2),0],[Math.floor(w/2),h-1],[0,Math.floor(h/2)],[w-1,Math.floor(h/2)]
+      ];
+      const cols=[];
+      for(const [sx,sy] of samples){
+        const p=cx.getImageData(sx,sy,1,1).data;
+        if(p[3]>240) cols.push([p[0],p[1],p[2]]);
+      }
+      if(cols.length>=3){
+        // median per channel
+        const med=[0,1,2].map(k=>{ const a=cols.map(c=>c[k]).sort((x,y)=>x-y); return a[a.length>>1]; });
+        const TOL=46; // tolerance — works for solid/near-solid backgrounds
+        const id=cx.getImageData(0,0,w,h);
+        const d=id.data;
+        for(let i=0;i<d.length;i+=4){
+          const dr=d[i]-med[0], dg=d[i+1]-med[1], db=d[i+2]-med[2];
+          const dist=Math.sqrt(dr*dr+dg*dg+db*db);
+          if(dist<TOL){
+            d[i+3]=0; // fully transparent
+          } else if(dist<TOL*1.6){
+            // soft edge
+            d[i+3]=Math.floor(d[i+3]*((dist-TOL)/(TOL*0.6)));
+          }
+        }
+        cx.putImageData(id,0,0);
+      }
+    }catch(e){ /* CORS or other — fall back to original */ }
     cb(c.toDataURL('image/png'));
   };
   im.onerror=()=>cb(srcUrl);
