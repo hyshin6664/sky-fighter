@@ -44,7 +44,7 @@
   </div>
   <div id="powerups"></div>
   <div id="combo"></div>
-  <div id="ver" title="버전">v2.4.0</div>
+  <div id="ver" title="버전">v2.5.0</div>
   <button id="pause" aria-label="일시정지">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
   <div id="toast"></div>
@@ -100,7 +100,7 @@ function loadAssetImg(path){ const im=new Image(); im.src=path; return im; }
 let planeImg = loadImg(LS_PLANE);
 let bgImg = loadImg(LS_BG);
 // fallback: try repo assets if user hasn't uploaded
-if(!planeImg){ const im=new Image(); im.onload=()=>{ if(!planeImg) planeImg=im; }; im.src='assets/plane.svg'; }
+if(!planeImg){ const im=new Image(); im.onload=()=>{ if(!planeImg) planeImg=im; }; im.onerror=()=>{ const im2=new Image(); im2.onload=()=>{ if(!planeImg) planeImg=im2; }; im2.src='assets/plane.svg'; }; im.src='assets/plane.png'; }
 if(!bgImg){ const im=new Image(); im.onload=()=>{ if(!bgImg) bgImg=im; }; im.src='assets/space.jpg'; }
 let hiScore = +(localStorage.getItem(LS_HI)||0);
 $('hiScore').textContent = hiScore;
