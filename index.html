@@ -44,11 +44,11 @@
   </div>
   <div id="powerups"></div>
   <div id="combo"></div>
-  <div id="ver" title="버전">v2.5.1</div>
+  <div id="ver" title="버전">v2.6.0</div>
   <button id="pause" aria-label="일시정지">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
   <div id="toast"></div>
-  <div id="footer">CDN &amp; Cloud is by Solbox..</div>
+  <div id="footer">CDN &amp; Cloud is by Solbox.. · Sprites: Kenney.nl (CC0), Skorpio &amp; wuhu (CC-BY-SA)</div>
 
   <div id="menu">
     <h1>✈ SKY FIGHTER</h1>
@@ -108,6 +108,15 @@ let bgImg = loadImg(LS_BG);
 // fallback: try repo assets if user hasn't uploaded
 if(!planeImg){ const im=new Image(); im.onload=()=>{ if(!planeImg) planeImg=im; }; im.onerror=()=>{ const im2=new Image(); im2.onload=()=>{ if(!planeImg) planeImg=im2; }; im2.src='assets/plane.svg'; }; im.src='assets/plane.png'; }
 if(!bgImg){ const im=new Image(); im.onload=()=>{ if(!bgImg) bgImg=im; }; im.src='assets/space.jpg'; }
+
+// Enemy + boss sprites
+const enemySprites = { mob:null, scout:null, shooter:null, bomber:null, boss:null };
+function loadSprite(key, path){ const im=new Image(); im.onload=()=>{ enemySprites[key]=im; }; im.src=path; }
+loadSprite('mob','assets/enemy_mob.png');
+loadSprite('scout','assets/enemy_scout.png');
+loadSprite('shooter','assets/enemy_shooter.png');
+loadSprite('bomber','assets/enemy_bomber.png');
+loadSprite('boss','assets/boss.png');
 let hiScore = +(localStorage.getItem(LS_HI)||0);
 $('hiScore').textContent = hiScore;
 
@@ -538,6 +547,28 @@ function drawPlayer(){
 
 function drawEnemy(e){
   ctx.save(); ctx.translate(e.x,e.y);
+  // sprite path (preferred) — facing down by default in source, so flip 180°
+  const spr = enemySprites[e.kind];
+  if(spr && spr.complete && spr.naturalWidth){
+    ctx.save();
+    ctx.rotate(Math.PI); // face downward toward player
+    if(e.kind==='boss'){
+      ctx.shadowBlur=22; ctx.shadowColor='#a04bff';
+      ctx.drawImage(spr, -e.w/2, -e.h/2, e.w, e.h);
+      ctx.shadowBlur=0;
+    } else {
+      ctx.drawImage(spr, -e.w/2, -e.h/2, e.w, e.h);
+    }
+    ctx.restore();
+    if(e.kind==='boss'){
+      const bw=e.w*1.1, bh=7, ratio=Math.max(0,e.hp/e.maxHp);
+      ctx.fillStyle='#220'; ctx.fillRect(-bw/2, -e.h/2-18, bw, bh);
+      ctx.fillStyle = ratio>0.5?'#7f4':ratio>0.25?'#fc4':'#f44';
+      ctx.fillRect(-bw/2, -e.h/2-18, bw*ratio, bh);
+    }
+    ctx.restore();
+    return;
+  }
   if(e.kind==='boss'){
     // mothership style
     ctx.shadowBlur=18; ctx.shadowColor='#a04bff';
@@ -697,15 +728,15 @@ function spawnEnemy(){
   else if(state.lv>=4 && r<0.40) kind='bomber';
   let e;
   const x=40+Math.random()*(W-80);
-  if(kind==='scout') e={x,y:-30,w:28,h:36,hp:1,maxHp:1,kind,vy:140+state.lv*8,vx:(Math.random()-0.5)*60,t:0};
-  else if(kind==='shooter') e={x,y:-30,w:46,h:46,hp:2+Math.floor(state.lv/2),maxHp:2,kind,vy:50+state.lv*4,vx:(Math.random()-0.5)*40,t:0,fireT:1+Math.random()};
-  else if(kind==='bomber') e={x,y:-40,w:80,h:60,hp:6+state.lv*2,maxHp:6+state.lv*2,kind,vy:35+state.lv*3,vx:0,t:0,fireT:1.5};
-  else e={x,y:-30,w:42,h:42,hp:1+Math.floor(state.lv/3),maxHp:1+Math.floor(state.lv/3),kind:'mob',vy:60+state.lv*8+Math.random()*30,vx:(Math.random()-0.5)*30,t:0};
+  if(kind==='scout') e={x,y:-40,w:60,h:54,hp:1,maxHp:1,kind,vy:140+state.lv*8,vx:(Math.random()-0.5)*60,t:0};
+  else if(kind==='shooter') e={x,y:-40,w:70,h:72,hp:2+Math.floor(state.lv/2),maxHp:2,kind,vy:50+state.lv*4,vx:(Math.random()-0.5)*40,t:0,fireT:1+Math.random()};
+  else if(kind==='bomber') e={x,y:-50,w:110,h:96,hp:6+state.lv*2,maxHp:6+state.lv*2,kind,vy:35+state.lv*3,vx:0,t:0,fireT:1.5};
+  else e={x,y:-40,w:80,h:66,hp:1+Math.floor(state.lv/3),maxHp:1+Math.floor(state.lv/3),kind:'mob',vy:60+state.lv*8+Math.random()*30,vx:(Math.random()-0.5)*30,t:0};
   enemies.push(e);
 }
 function spawnBoss(){
   state.bossActive=true; bgmMode='boss'; bgmSwitch('boss');
-  enemies.push({x:W/2,y:-100,w:170,h:140,hp:35+state.lv*10,maxHp:35+state.lv*10,kind:'boss',vy:25,vx:70,t:0,phase:1,fireT:1});
+  enemies.push({x:W/2,y:-160,w:200,h:240,hp:35+state.lv*10,maxHp:35+state.lv*10,kind:'boss',vy:25,vx:70,t:0,phase:1,fireT:1});
   toast('👑 BOSS!'); sfxBoss();
   state.shake = 12;
 }
