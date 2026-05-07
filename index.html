@@ -48,7 +48,11 @@
   #bombBtn .cnt{position:absolute;right:-4px;top:-4px;background:#000;color:#ffd84a;font-size:14px;width:24px;height:24px;border-radius:12px;display:flex;align-items:center;justify-content:center;border:2px solid #ffd84a}
   #pause{position:fixed;right:8px;top:34px;background:rgba(0,0,0,.5);color:#fff;border:1px solid rgba(255,255,255,.2);padding:6px 12px;border-radius:8px;font-weight:700;z-index:5;cursor:pointer;display:none;touch-action:manipulation}
   #toast{position:fixed;left:50%;top:30%;transform:translate(-50%,-50%);background:rgba(0,0,0,.7);padding:14px 22px;border-radius:12px;font-size:18px;font-weight:700;z-index:7;display:none;text-align:center;box-shadow:0 0 30px rgba(255,180,80,.4);border:1px solid rgba(255,200,100,.3)}
-  #footer{position:fixed;right:8px;bottom:6px;font-size:10px;opacity:.5;z-index:4;pointer-events:none}
+  #footer{position:fixed;left:8px;bottom:6px;display:flex;gap:6px;font-size:11px;z-index:4;pointer-events:none;flex-wrap:wrap;align-items:center}
+  #footer .pill{padding:3px 10px;border-radius:14px;font-weight:600;border:1px solid;backdrop-filter:blur(6px);white-space:nowrap}
+  #footer .pill.visit{background:rgba(180,255,180,.18);border-color:rgba(140,230,140,.45);color:#bff5be}
+  #footer .pill.solbox{background:rgba(200,180,255,.18);border-color:rgba(180,160,240,.45);color:#dccaff}
+  #footer .pill.credit{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.18);color:#ddd;opacity:.7;font-size:10px}
   /* show joystick & bomb button on touch devices regardless of hover capability */
   @media (pointer:coarse){#stick.show, #bombBtn.show{display:block!important}}
 </style>
@@ -62,12 +66,16 @@
   </div>
   <div id="powerups"></div>
   <div id="combo"></div>
-  <div id="ver" title="버전">v3.2.2</div>
+  <div id="ver" title="버전">v3.3.0</div>
   <button id="pause" aria-label="일시정지">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
   <button id="bombBtn" aria-label="폭탄 사용">💣<span class="cnt" id="bombCnt">0</span></button>
   <div id="toast"></div>
-  <div id="footer">솔박스 CDN·클라우드 사용중 · 스프라이트: Kenney.nl (CC0), Skorpio &amp; wuhu (CC-BY-SA)</div>
+  <div id="footer">
+    <div class="pill visit">🌿 방문 <span id="visitGlobal">…</span>회</div>
+    <div class="pill solbox">CDN &amp; Cloud is by Solbox..</div>
+    <div class="pill credit">Sprites: Kenney.nl · Skorpio &amp; wuhu</div>
+  </div>
 
   <!-- 마왕 얼굴 크롭 모달 -->
   <div id="cropModal">
@@ -175,6 +183,28 @@ $('hiScore').textContent = hiScore;
 $('vNum').textContent = visitCount;
 $('pNum').textContent = playCount;
 $('bNum').textContent = bossKillCount;
+
+// Global visit counter — anyone in the world hitting the page increments.
+// Tries CountAPI/abacus then falls back to local count if blocked.
+(function fetchGlobalVisit(){
+  const span = $('visitGlobal');
+  // mark this session as already counted in our own localStorage
+  const ENDPOINTS = [
+    'https://api.counterapi.dev/v1/skyfighter-2026/visit/up',
+    'https://abacus.jasoncameron.dev/hit/skyfighter-2026/visit'
+  ];
+  let i = 0;
+  function tryNext(){
+    if(i>=ENDPOINTS.length){ span.textContent = visitCount; return; }
+    const url = ENDPOINTS[i++];
+    fetch(url, {cache:'no-store'}).then(r=>r.json()).then(d=>{
+      const n = d.count ?? d.value ?? d.up_count;
+      if(typeof n === 'number'){ span.textContent = n.toLocaleString(); }
+      else tryNext();
+    }).catch(()=>tryNext());
+  }
+  tryNext();
+})();
 function bumpPlay(){ playCount++; localStorage.setItem(LS_PLAYS, String(playCount)); $('pNum').textContent=playCount; }
 function bumpBossKill(){ bossKillCount++; localStorage.setItem(LS_BOSSKILL, String(bossKillCount)); $('bNum').textContent=bossKillCount; }
 
