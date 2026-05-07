@@ -26,6 +26,19 @@
   #menu .preview .box{width:80px;height:80px;border:1px dashed #6af;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:11px;background:rgba(0,0,0,.3);overflow:hidden}
   #menu .preview .box img{max-width:100%;max-height:100%}
   #hi{font-size:13px;opacity:.85}
+  #visitCnt{font-size:11px;opacity:.7;margin-top:-6px}
+  /* boss face crop modal */
+  #cropModal{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:20;display:none;align-items:center;justify-content:center;padding:20px;flex-direction:column;gap:10px}
+  #cropModal h3{font-size:16px;font-weight:700}
+  #cropArea{position:relative;width:min(90vw,420px);height:min(90vw,420px);background:#111;border:1px solid #444;overflow:hidden;touch-action:none;border-radius:8px}
+  #cropImg{position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none;user-select:none;-webkit-user-drag:none}
+  #cropOverlay{position:absolute;inset:0;pointer-events:none}
+  #cropCircle{position:absolute;border:3px solid #4ff;border-radius:50%;box-shadow:0 0 0 9999px rgba(0,0,0,.55);pointer-events:none}
+  #cropTools{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  #cropTools button{background:#2a4d8a;color:#fff;border:0;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px}
+  #cropTools button.primary{background:#4a8;}
+  #cropTools button.danger{background:#a44;}
+  #cropTools .small{font-size:11px;opacity:.7;width:100%;text-align:center}
   input[type=file]{display:none}
   #stick{position:fixed;right:24px;bottom:24px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.35);z-index:6;display:none;touch-action:none;backdrop-filter:blur(4px)}
   #stick .knob{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:50%;background:rgba(255,255,255,.5);border:2px solid rgba(255,255,255,.8);box-shadow:0 4px 14px rgba(0,0,0,.5);pointer-events:none}
@@ -49,16 +62,34 @@
   </div>
   <div id="powerups"></div>
   <div id="combo"></div>
-  <div id="ver" title="버전">v3.1.0</div>
+  <div id="ver" title="버전">v3.2.0</div>
   <button id="pause" aria-label="일시정지">II</button>
   <div id="stick"><div class="knob" id="knob"></div></div>
   <button id="bombBtn" aria-label="폭탄 사용">💣<span class="cnt" id="bombCnt">0</span></button>
   <div id="toast"></div>
-  <div id="footer">CDN &amp; Cloud is by Solbox.. · Sprites: Kenney.nl (CC0), Skorpio &amp; wuhu (CC-BY-SA)</div>
+  <div id="footer">솔박스 CDN·클라우드 사용중 · 스프라이트: Kenney.nl (CC0), Skorpio &amp; wuhu (CC-BY-SA)</div>
+
+  <!-- 마왕 얼굴 크롭 모달 -->
+  <div id="cropModal">
+    <h3>👹 마왕 얼굴 영역 선택</h3>
+    <div id="cropArea">
+      <img id="cropImg" alt=""/>
+      <div id="cropOverlay"><div id="cropCircle"></div></div>
+    </div>
+    <div id="cropTools">
+      <button id="cropZoomIn">🔍+</button>
+      <button id="cropZoomOut">🔍−</button>
+      <button id="cropReset">↺ 리셋</button>
+      <button id="cropCancel" class="danger">취소</button>
+      <button id="cropOk" class="primary">✓ 적용</button>
+      <div class="small">사진을 손가락/마우스로 끌고 휠/버튼으로 확대 · 가운데 동그라미가 마왕 얼굴이 됩니다</div>
+    </div>
+  </div>
 
   <div id="menu">
     <h1>✈ SKY FIGHTER</h1>
     <div id="hi">최고 점수: <span id="hiScore">0</span></div>
+    <div id="visitCnt">접속 횟수: <span id="vNum">0</span> · 플레이: <span id="pNum">0</span> · 보스 처치: <span id="bNum">0</span></div>
     <div class="preview">
       <div class="box" id="prevPlane">비행기</div>
       <div class="box" id="prevBg">배경</div>
@@ -68,6 +99,8 @@
       <input id="planeFile" type="file" accept="image/*"/>
       <label for="bgFile">🌄 배경</label>
       <input id="bgFile" type="file" accept="image/*"/>
+      <label for="bossFile">👹 마왕 얼굴</label>
+      <input id="bossFile" type="file" accept="image/*"/>
       <button id="resetImg">기본으로</button>
     </div>
     <button id="start" class="primary">▶ START</button>
@@ -103,7 +136,13 @@ if(isTouch){ $('stick').classList.add('show'); $('bombBtn').classList.add('show'
 const rand = (a,b)=>a+Math.random()*(b-a);
 
 // ========= storage =========
-const LS_PLANE='sf_plane_img', LS_BG='sf_bg_img', LS_HI='sf_hi', LS_PLANE_V='sf_plane_v';
+const LS_PLANE='sf_plane_img', LS_BG='sf_bg_img', LS_HI='sf_hi', LS_PLANE_V='sf_plane_v',
+      LS_BOSS_FACE='sf_boss_face', LS_VISIT='sf_visit', LS_PLAYS='sf_plays', LS_BOSSKILL='sf_bosskill';
+// visit counter — increment each time the page loads
+let visitCount = (+(localStorage.getItem(LS_VISIT)||0)) + 1;
+localStorage.setItem(LS_VISIT, String(visitCount));
+let playCount = +(localStorage.getItem(LS_PLAYS)||0);
+let bossKillCount = +(localStorage.getItem(LS_BOSSKILL)||0);
 // One-time cleanup: if user has a plane image saved without the version marker
 // (= uploaded before v2.5 chroma-key fix), drop it so the fresh assets/plane.png is used.
 const PLANE_VERSION_REQUIRED = 5;
@@ -133,6 +172,15 @@ let bgIdx = 0;
 function nextBg(){ bgIdx = (bgIdx+1) % bgPool.length; if(!localStorage.getItem(LS_BG)) bgImg = bgPool[bgIdx]; }
 let hiScore = +(localStorage.getItem(LS_HI)||0);
 $('hiScore').textContent = hiScore;
+$('vNum').textContent = visitCount;
+$('pNum').textContent = playCount;
+$('bNum').textContent = bossKillCount;
+function bumpPlay(){ playCount++; localStorage.setItem(LS_PLAYS, String(playCount)); $('pNum').textContent=playCount; }
+function bumpBossKill(){ bossKillCount++; localStorage.setItem(LS_BOSSKILL, String(bossKillCount)); $('bNum').textContent=bossKillCount; }
+
+// boss face image (cropped circular, saved as dataURL)
+let bossFaceImg = null;
+{ const d = localStorage.getItem(LS_BOSS_FACE); if(d){ const im=new Image(); im.src=d; bossFaceImg=im; } }
 
 function setPreview(){
   const p=$('prevPlane'), b=$('prevBg');
@@ -275,12 +323,162 @@ function readFile(f, key, setter, isPlane){
 }
 $('planeFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readFile(f, LS_PLANE, im=>planeImg=im, true); });
 $('bgFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readFile(f, LS_BG, im=>bgImg=im, false); });
+$('bossFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) openCropModal(f); });
 $('resetImg').addEventListener('click', ()=>{
-  localStorage.removeItem(LS_PLANE); localStorage.removeItem(LS_BG); localStorage.removeItem(LS_PLANE_V);
-  planeImg=null; bgImg=null; setPreview();
-  // re-trigger asset loads
+  localStorage.removeItem(LS_PLANE); localStorage.removeItem(LS_BG); localStorage.removeItem(LS_PLANE_V); localStorage.removeItem(LS_BOSS_FACE);
+  planeImg=null; bgImg=null; bossFaceImg=null; setPreview();
   const im=new Image(); im.onload=()=>{ if(!planeImg){ planeImg=im; setPreview(); } }; im.src='assets/plane.png?'+Date.now();
   const im2=new Image(); im2.onload=()=>{ if(!bgImg){ bgImg=im2; setPreview(); } }; im2.src='assets/space.jpg?'+Date.now();
+});
+
+// ========= Boss face crop modal =========
+function openCropModal(file){
+  const r = new FileReader();
+  r.onload = ()=>{
+    const im = new Image();
+    im.onload = ()=>{ initCrop(im); };
+    im.src = r.result;
+  };
+  r.readAsDataURL(file);
+}
+let cropState = null;
+function initCrop(im){
+  const modal = $('cropModal');
+  const area = $('cropArea');
+  const imgEl = $('cropImg');
+  const circle = $('cropCircle');
+  modal.style.display = 'flex';
+
+  // wait a frame for layout
+  requestAnimationFrame(()=>{
+    const aw = area.clientWidth, ah = area.clientHeight;
+    const cd = Math.min(aw, ah) * 0.6;
+    const cx = aw/2, cy = ah/2;
+    circle.style.width = cd+'px'; circle.style.height = cd+'px';
+    circle.style.left = (cx - cd/2) + 'px'; circle.style.top = (cy - cd/2) + 'px';
+
+    imgEl.src = im.src;
+    // initial scale to fit
+    const fitS = Math.max(aw/im.naturalWidth, ah/im.naturalHeight);
+    cropState = {
+      img: im,
+      aw, ah, cd, cx, cy,
+      scale: fitS,
+      x: (aw - im.naturalWidth*fitS)/2,
+      y: (ah - im.naturalHeight*fitS)/2
+    };
+    applyCrop();
+  });
+}
+function applyCrop(){
+  if(!cropState) return;
+  const imgEl = $('cropImg');
+  imgEl.style.width = cropState.img.naturalWidth+'px';
+  imgEl.style.height = cropState.img.naturalHeight+'px';
+  imgEl.style.transform = `translate(${cropState.x}px,${cropState.y}px) scale(${cropState.scale})`;
+}
+(function setupCropDrag(){
+  const area = $('cropArea');
+  let dragging=false, lastX=0, lastY=0, pinchD0=0, scale0=0;
+  area.addEventListener('pointerdown', e=>{
+    if(!cropState) return;
+    dragging=true; lastX=e.clientX; lastY=e.clientY;
+    area.setPointerCapture(e.pointerId);
+  });
+  area.addEventListener('pointermove', e=>{
+    if(!dragging || !cropState) return;
+    cropState.x += (e.clientX - lastX);
+    cropState.y += (e.clientY - lastY);
+    lastX=e.clientX; lastY=e.clientY;
+    applyCrop();
+  });
+  area.addEventListener('pointerup', e=>{ dragging=false; });
+  area.addEventListener('pointercancel', ()=>{ dragging=false; });
+  area.addEventListener('wheel', e=>{
+    if(!cropState) return; e.preventDefault();
+    const k = e.deltaY<0 ? 1.1 : 0.9;
+    cropState.scale *= k;
+    applyCrop();
+  }, {passive:false});
+  // pinch-zoom on touch (2 finger)
+  let touches = [];
+  area.addEventListener('touchstart', e=>{
+    if(e.touches.length===2 && cropState){
+      pinchD0 = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      scale0 = cropState.scale;
+      dragging=false;
+    }
+  });
+  area.addEventListener('touchmove', e=>{
+    if(e.touches.length===2 && cropState && pinchD0){
+      const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      cropState.scale = scale0 * (d/pinchD0);
+      applyCrop();
+      e.preventDefault();
+    }
+  }, {passive:false});
+})();
+$('cropZoomIn').addEventListener('click', ()=>{ if(cropState){ cropState.scale*=1.15; applyCrop(); } });
+$('cropZoomOut').addEventListener('click', ()=>{ if(cropState){ cropState.scale*=0.87; applyCrop(); } });
+$('cropReset').addEventListener('click', ()=>{
+  if(!cropState) return;
+  const im=cropState.img;
+  cropState.scale = Math.max(cropState.aw/im.naturalWidth, cropState.ah/im.naturalHeight);
+  cropState.x = (cropState.aw - im.naturalWidth*cropState.scale)/2;
+  cropState.y = (cropState.ah - im.naturalHeight*cropState.scale)/2;
+  applyCrop();
+});
+$('cropCancel').addEventListener('click', ()=>{ $('cropModal').style.display='none'; cropState=null; $('bossFile').value=''; });
+$('cropOk').addEventListener('click', ()=>{
+  if(!cropState) return;
+  // render selected circular region into 256x256 canvas with boss-tone feathered edge
+  const SZ = 256;
+  const c = document.createElement('canvas'); c.width=SZ; c.height=SZ;
+  const cx = c.getContext('2d');
+
+  // Map: area-circle (cd diameter at center) -> source image pixels via inverse transform
+  // imgEl shown at: world = imgPixel * scale + (x,y) [in area coords]
+  // so source pixel = (areaCoord - (x,y)) / scale
+  const areaCx = cropState.cx, areaCy = cropState.cy;
+  const areaR = cropState.cd/2;
+  // source square covering circle
+  const srcCx = (areaCx - cropState.x) / cropState.scale;
+  const srcCy = (areaCy - cropState.y) / cropState.scale;
+  const srcR  = areaR / cropState.scale;
+
+  // draw source region scaled into our 256 canvas
+  cx.save();
+  // soft circular mask with feather
+  cx.beginPath(); cx.arc(SZ/2, SZ/2, SZ/2-2, 0, Math.PI*2); cx.clip();
+  // dest mapping: (SZ/2) + delta = (srcCx + delta/SZ*2*srcR)
+  const dx = SZ/2 - srcCx*(SZ/(2*srcR));
+  const dy = SZ/2 - srcCy*(SZ/(2*srcR));
+  const sScale = SZ/(2*srcR);
+  cx.translate(dx, dy);
+  cx.scale(sScale, sScale);
+  cx.drawImage(cropState.img, 0, 0);
+  cx.restore();
+
+  // feather edge: paint a transparent->boss-red ring at outer edge
+  const feather = 28;
+  const grad = cx.createRadialGradient(SZ/2, SZ/2, SZ/2 - feather, SZ/2, SZ/2, SZ/2);
+  grad.addColorStop(0, 'rgba(60,10,30,0)');
+  grad.addColorStop(0.6, 'rgba(60,10,30,0.55)');
+  grad.addColorStop(1, 'rgba(40,5,20,1)');
+  cx.fillStyle = grad;
+  cx.beginPath(); cx.arc(SZ/2, SZ/2, SZ/2, 0, Math.PI*2); cx.fill();
+
+  // outer transparent ring (clear corners)
+  cx.globalCompositeOperation = 'destination-in';
+  cx.fillStyle = '#000';
+  cx.beginPath(); cx.arc(SZ/2, SZ/2, SZ/2, 0, Math.PI*2); cx.fill();
+  cx.globalCompositeOperation = 'source-over';
+
+  const data = c.toDataURL('image/png');
+  try{ localStorage.setItem(LS_BOSS_FACE, data); }
+  catch(e){ alert('저장 공간 부족'); }
+  const im=new Image(); im.onload=()=>{ bossFaceImg=im; toast('👹 마왕 얼굴 등록 완료'); }; im.src=data;
+  $('cropModal').style.display='none'; cropState=null; $('bossFile').value='';
 });
 
 // ========= audio =========
@@ -607,78 +805,122 @@ function drawPlayer(){
   }
 }
 
-// Scary monster boss — drawn dynamically every frame
+// Scary 마왕 — drawn dynamically. Tier 1..5 deepens color, adds horns/tentacles per stage.
 function drawScaryBoss(e){
   const t = state.t;
   const W2 = e.w, H2 = e.h;
   const pulse = 1 + Math.sin(t*4)*0.05;
+  const tier = e.tier||1;
+
+  // tier-based colors — darker and more red as tier increases
+  const tones = [
+    {c0:'#5a1030', c1:'#2a0820', c2:'#0a0414', spike:'#0a0414', tent:'#1a0830', aura:'rgba(120,0,40,0.7)'},
+    {c0:'#7a1530', c1:'#3a0a20', c2:'#160510', spike:'#0a0210', tent:'#2a0820', aura:'rgba(150,10,30,0.75)'},
+    {c0:'#9a2030', c1:'#4a0a18', c2:'#1c0306', spike:'#1c0306', tent:'#3a0510', aura:'rgba(180,20,30,0.8)'},
+    {c0:'#b82828', c1:'#601020', c2:'#220406', spike:'#220406', tent:'#4a0810', aura:'rgba(220,30,20,0.85)'},
+    {c0:'#e02828', c1:'#7a1010', c2:'#2a0202', spike:'#2a0202', tent:'#5a0404', aura:'rgba(255,40,30,0.9)'}
+  ];
+  const tone = tones[Math.min(tier,5)-1];
+  const tentCount = 6 + tier*2;     // 8,10,12,14,16
+  const hornCount = Math.max(0, (tier-1)*2);  // 0,2,4,6,8
 
   // dark aura
   ctx.save();
-  const aura = ctx.createRadialGradient(0,0,W2*0.3,0,0,W2*0.9);
-  aura.addColorStop(0,'rgba(120,0,40,0.7)');
-  aura.addColorStop(0.6,'rgba(60,0,80,0.4)');
+  const aura = ctx.createRadialGradient(0,0,W2*0.3,0,0,W2*0.95);
+  aura.addColorStop(0,tone.aura);
+  aura.addColorStop(0.6,'rgba(40,0,40,0.4)');
   aura.addColorStop(1,'rgba(0,0,0,0)');
   ctx.fillStyle=aura;
   ctx.fillRect(-W2,-H2,W2*2,H2*2);
   ctx.restore();
 
-  // tentacles waving (8 of them)
+  // tentacles — animated, more per tier
   ctx.save();
-  ctx.strokeStyle='#1a0830'; ctx.lineWidth=10; ctx.lineCap='round';
-  for(let i=0;i<8;i++){
-    const baseA = (i/8)*Math.PI*2;
-    const len = W2*0.55*pulse;
-    const wave = Math.sin(t*2+i)*0.6;
-    const x1 = Math.cos(baseA)*W2*0.35;
-    const y1 = Math.sin(baseA)*H2*0.32;
-    const x2 = Math.cos(baseA+wave)*len;
-    const y2 = Math.sin(baseA+wave)*len*0.95;
-    ctx.beginPath(); ctx.moveTo(x1,y1);
-    ctx.quadraticCurveTo(x1*1.4, y1*1.4, x2, y2);
+  ctx.strokeStyle=tone.tent; ctx.lineCap='round';
+  for(let i=0;i<tentCount;i++){
+    const baseA = (i/tentCount)*Math.PI*2;
+    const len = W2*(0.55+tier*0.05)*pulse;
+    const wave = Math.sin(t*2+i)*0.7 + Math.sin(t*3+i*0.7)*0.3;
+    const segs = 4;
+    let prevX=Math.cos(baseA)*W2*0.32, prevY=Math.sin(baseA)*H2*0.30;
+    ctx.lineWidth = 11+tier;
+    ctx.beginPath(); ctx.moveTo(prevX, prevY);
+    for(let s=1;s<=segs;s++){
+      const ft = s/segs;
+      const a = baseA + wave*ft + Math.sin(t*1.5+i+s)*0.15;
+      const r = W2*0.32 + (len-W2*0.32)*ft;
+      const x = Math.cos(a)*r, y = Math.sin(a)*r*1.0;
+      ctx.lineWidth = (11+tier) * (1-ft*0.6);
+      ctx.lineTo(x,y);
+      prevX=x; prevY=y;
+    }
     ctx.stroke();
-    // tentacle tip suckers
-    ctx.fillStyle='#3a0a4a';
-    ctx.beginPath(); ctx.arc(x2,y2,5,0,Math.PI*2); ctx.fill();
+    // suckers
+    ctx.fillStyle=tone.c0;
+    ctx.beginPath(); ctx.arc(prevX,prevY,6+tier*0.5,0,Math.PI*2); ctx.fill();
   }
   ctx.restore();
 
-  // body — dark organic blob
+  // body
   ctx.save();
   ctx.scale(pulse,pulse);
-  const body = ctx.createRadialGradient(0,-H2*0.05,W2*0.1,0,0,W2*0.45);
-  body.addColorStop(0,'#5a1030');
-  body.addColorStop(0.5,'#2a0820');
-  body.addColorStop(1,'#0a0414');
+  const body = ctx.createRadialGradient(0,-H2*0.05,W2*0.1,0,0,W2*0.46);
+  body.addColorStop(0,tone.c0);
+  body.addColorStop(0.5,tone.c1);
+  body.addColorStop(1,tone.c2);
   ctx.fillStyle=body;
   ctx.beginPath();
-  // organic blob with bumps
-  const N=18;
+  const N=20;
   for(let i=0;i<N;i++){
     const a=i/N*Math.PI*2;
-    const r=W2*0.42 + Math.sin(a*3+t)*8 + Math.cos(a*5)*6;
+    const r=W2*0.43 + Math.sin(a*3+t)*8 + Math.cos(a*5)*6;
     const x=Math.cos(a)*r, y=Math.sin(a)*r*1.05;
     if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
   }
   ctx.closePath(); ctx.fill();
-
-  // skin texture spots
-  ctx.fillStyle='rgba(80,10,30,0.6)';
-  for(let i=0;i<14;i++){
-    const a=i/14*Math.PI*2 + t*0.1;
+  // veiny pulsing texture
+  ctx.fillStyle='rgba(120,0,20,'+(0.4+0.2*Math.sin(t*2))+')';
+  for(let i=0;i<14+tier*2;i++){
+    const a=i/(14+tier*2)*Math.PI*2 + t*0.1;
     const r=W2*0.25;
     const x=Math.cos(a)*r, y=Math.sin(a)*r;
-    ctx.beginPath(); ctx.arc(x,y,4+Math.sin(t*3+i)*1.5,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x,y,4+Math.sin(t*3+i)*1.5+tier*0.3,0,Math.PI*2); ctx.fill();
   }
   ctx.restore();
 
-  // spikes around top
+  // horns (tier 2+)
+  if(hornCount>0){
+    ctx.save();
+    for(let i=0;i<hornCount;i++){
+      const a = -Math.PI*0.5 + (i - (hornCount-1)/2)*0.20;
+      const baseR=W2*0.40, tipR=W2*(0.62 + tier*0.04);
+      const bx=Math.cos(a)*baseR, by=Math.sin(a)*baseR;
+      const tx=Math.cos(a)*tipR + (i%2?6:-6), ty=Math.sin(a)*tipR;
+      const px=Math.cos(a+Math.PI/2)*(7+tier), py=Math.sin(a+Math.PI/2)*(7+tier);
+      // horn body
+      const hg = ctx.createLinearGradient(bx,by,tx,ty);
+      hg.addColorStop(0, tone.c1);
+      hg.addColorStop(1, '#0a0000');
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.moveTo(bx-px, by-py);
+      ctx.quadraticCurveTo(bx*1.2,by*1.2-12, tx, ty);
+      ctx.lineTo(bx+px, by+py);
+      ctx.closePath(); ctx.fill();
+      // horn highlight
+      ctx.strokeStyle='rgba(180,40,40,0.5)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(bx-px*0.5,by-py*0.5); ctx.quadraticCurveTo(bx*1.1,by*1.1-8,tx,ty); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // small spikes around (always)
   ctx.save();
-  ctx.fillStyle='#0a0414';
-  for(let i=0;i<7;i++){
-    const a=-Math.PI/2 + (i-3)*0.3;
-    const baseR=W2*0.42, tipR=W2*0.55;
-    const baseW=8;
+  ctx.fillStyle=tone.spike;
+  for(let i=0;i<7+tier;i++){
+    const a=-Math.PI/2 + (i-(6+tier)/2)*0.28;
+    const baseR=W2*0.42, tipR=W2*(0.50 + tier*0.02);
+    const baseW=6+tier*0.5;
     const bx=Math.cos(a)*baseR, by=Math.sin(a)*baseR*1.05;
     const tx=Math.cos(a)*tipR, ty=Math.sin(a)*tipR*1.05;
     const px=Math.cos(a+Math.PI/2)*baseW, py=Math.sin(a+Math.PI/2)*baseW;
@@ -690,34 +932,58 @@ function drawScaryBoss(e){
   }
   ctx.restore();
 
-  // glowing red eyes (2)
-  const eyeGlow = 0.6+Math.sin(t*3)*0.3;
-  for(const sx of [-1,1]){
-    const ex = sx*W2*0.16, ey = -H2*0.05;
+  // CUSTOM FACE (if uploaded) — placed at upper-center, naturally blended
+  if(bossFaceImg && bossFaceImg.complete && bossFaceImg.naturalWidth){
+    const fcy = -H2*0.10;
+    const fr = W2*0.32;
     ctx.save();
-    ctx.shadowBlur = 30; ctx.shadowColor = '#ff2030';
-    const g = ctx.createRadialGradient(ex,ey,0,ex,ey,18);
-    g.addColorStop(0,'#ffffff');
-    g.addColorStop(0.3,'#ff5560');
-    g.addColorStop(1,`rgba(120,0,20,${eyeGlow})`);
-    ctx.fillStyle=g;
-    ctx.beginPath(); ctx.arc(ex,ey,16,0,Math.PI*2); ctx.fill();
-    // pupil tracks player
-    const pa = Math.atan2(player.y-e.y-ey, player.x-e.x-ex);
-    const px = ex+Math.cos(pa)*5, py = ey+Math.sin(pa)*5;
+    // tint to match boss tone slightly
+    ctx.shadowBlur=18; ctx.shadowColor=tone.c0;
+    ctx.drawImage(bossFaceImg, -fr, fcy-fr, fr*2, fr*2);
     ctx.shadowBlur=0;
-    ctx.fillStyle='#1a0000';
-    ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2); ctx.fill();
-    // eye-shine
-    ctx.fillStyle='rgba(255,200,200,0.7)';
-    ctx.beginPath(); ctx.arc(px-1,py-1,1.6,0,Math.PI*2); ctx.fill();
+    // overlay tier-tinted vignette around face
+    const vg = ctx.createRadialGradient(0,fcy,fr*0.6,0,fcy,fr*1.05);
+    vg.addColorStop(0,'rgba(0,0,0,0)');
+    vg.addColorStop(1,tone.c1);
+    ctx.fillStyle=vg;
+    ctx.beginPath(); ctx.arc(0,fcy,fr*1.05,0,Math.PI*2); ctx.fill();
+    // bloodshot eye sparks (around custom face)
+    if(tier>=3){
+      ctx.fillStyle='rgba(255,40,40,0.4)';
+      for(let k=0;k<6;k++){
+        const a=k/6*Math.PI*2 + t;
+        const x=Math.cos(a)*fr*0.7, y=fcy+Math.sin(a)*fr*0.7;
+        ctx.beginPath(); ctx.arc(x,y,3+Math.sin(t*5+k),0,Math.PI*2); ctx.fill();
+      }
+    }
     ctx.restore();
+  } else {
+    // Default eyes
+    const eyeGlow = 0.6+Math.sin(t*3)*0.3;
+    for(const sx of [-1,1]){
+      const ex = sx*W2*0.16, ey = -H2*0.05;
+      ctx.save();
+      ctx.shadowBlur = 30; ctx.shadowColor = '#ff2030';
+      const g = ctx.createRadialGradient(ex,ey,0,ex,ey,18+tier);
+      g.addColorStop(0,'#ffffff');
+      g.addColorStop(0.3,'#ff5560');
+      g.addColorStop(1,`rgba(120,0,20,${eyeGlow})`);
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(ex,ey,16+tier,0,Math.PI*2); ctx.fill();
+      const pa = Math.atan2(player.y-e.y-ey, player.x-e.x-ex);
+      const px = ex+Math.cos(pa)*5, py = ey+Math.sin(pa)*5;
+      ctx.shadowBlur=0;
+      ctx.fillStyle='#1a0000';
+      ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(255,200,200,0.7)';
+      ctx.beginPath(); ctx.arc(px-1,py-1,1.6,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
   }
 
-  // mouth — jagged maw
+  // mouth (always shown below the face)
   ctx.save();
-  const my = H2*0.18, mw = W2*0.32, mh = H2*0.10;
-  // glow inside
+  const my = H2*0.18, mw = W2*0.30, mh = H2*0.10;
   const mg = ctx.createRadialGradient(0,my,2,0,my,mw*0.9);
   mg.addColorStop(0,'#ffaa30');
   mg.addColorStop(0.5,'#cc2010');
@@ -729,9 +995,8 @@ function drawScaryBoss(e){
   ctx.lineTo(mw*0.7, my+mh*1.4);
   ctx.lineTo(-mw*0.7, my+mh*1.4);
   ctx.closePath(); ctx.fill();
-  // teeth
   ctx.fillStyle='#fffbe0';
-  const teeth=8;
+  const teeth=8+tier;
   for(let i=0;i<teeth;i++){
     const xx = -mw + (i+0.5)*(mw*2/teeth);
     ctx.beginPath();
@@ -740,7 +1005,6 @@ function drawScaryBoss(e){
     ctx.lineTo(xx, my+8+Math.sin(i)*2);
     ctx.closePath(); ctx.fill();
   }
-  // bottom teeth
   for(let i=0;i<teeth-1;i++){
     const xx = -mw*0.7 + (i+0.5)*(mw*1.4/(teeth-1));
     ctx.beginPath();
@@ -751,12 +1015,41 @@ function drawScaryBoss(e){
   }
   ctx.restore();
 
+  // bruises (persistent hit marks)
+  if(e.bruises){
+    for(const br of e.bruises){
+      ctx.save();
+      const a = Math.min(1, br.life/4);
+      ctx.globalAlpha = a;
+      const bg = ctx.createRadialGradient(br.x,br.y,0,br.x,br.y,br.r);
+      bg.addColorStop(0,'rgba(40,0,60,0.95)');
+      bg.addColorStop(0.6,'rgba(80,10,20,0.6)');
+      bg.addColorStop(1,'rgba(60,0,40,0)');
+      ctx.fillStyle=bg;
+      ctx.beginPath(); ctx.arc(br.x,br.y,br.r,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  }
+  // dripping blood
+  if(e.bloodDrip){
+    for(const d of e.bloodDrip){
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, d.life);
+      ctx.fillStyle = '#a0101a';
+      ctx.beginPath(); ctx.ellipse(d.x,d.y,3.5,6,0,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
   // HP bar
-  const bw=e.w*1.0, bh=8, ratio=Math.max(0,e.hp/e.maxHp);
+  const bw=e.w*1.0, bh=10, ratio=Math.max(0,e.hp/e.maxHp);
   ctx.fillStyle='#220'; ctx.fillRect(-bw/2, -e.h/2-22, bw, bh);
   ctx.fillStyle = ratio>0.5?'#7f4':ratio>0.25?'#fc4':'#f44';
   ctx.fillRect(-bw/2, -e.h/2-22, bw*ratio, bh);
   ctx.strokeStyle='#000'; ctx.lineWidth=1.5; ctx.strokeRect(-bw/2, -e.h/2-22, bw, bh);
+  // tier label
+  ctx.fillStyle='#fff'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
+  ctx.fillText('마왕 Tier '+tier, 0, -e.h/2-26);
 }
 
 function drawEnemy(e){
@@ -949,9 +1242,20 @@ function spawnEnemy(){
 }
 function spawnBoss(){
   state.bossActive=true; bgmSwitch('boss');
-  enemies.push({x:W/2,y:-180,w:240,h:260,hp:40+state.lv*12,maxHp:40+state.lv*12,kind:'boss',vy:25,vx:70,t:0,phase:1,fireT:1});
-  toast('👹 어둠의 군주 강림!', 1800); sfxBoss();
-  state.shake = 16;
+  // HP x4, scales with level. Tier increases visual intensity.
+  const tier = Math.min(5, state.lv);
+  const baseHp = (40 + state.lv*12) * 4;
+  enemies.push({
+    x:W/2, y:-200, w:240+tier*20, h:260+tier*20,
+    hp:baseHp, maxHp:baseHp,
+    kind:'boss', vy:22, vx:60+tier*8, t:0, phase:1, fireT:1,
+    tier,                  // visual tier 1..5
+    bruises:[],            // hit marks {x,y,r,life}
+    bloodDrip:[]           // dripping blood {x,y,vy,life}
+  });
+  toast('👹 마왕 강림! Tier '+tier, 2000); sfxBoss();
+  state.shake = 18;
+  if(navigator.vibrate) navigator.vibrate([100,60,150]);
 }
 function maybeDropItem(x,y){
   if(Math.random()<0.14){
@@ -1155,6 +1459,16 @@ function loop(ts){
         if(Math.abs(b.x-e.x)<e.w/2 && Math.abs(b.y-e.y)<e.h/2){
           const dmg = b.dmg||1;
           e.hp -= dmg;
+          // boss hit feedback: persistent bruise + blood splat
+          if(e.kind==='boss'){
+            const lx = b.x - e.x, ly = b.y - e.y;
+            if(e.bruises.length<22) e.bruises.push({x:lx, y:ly, r:8+Math.random()*8, life:6});
+            if(Math.random()<0.4 && e.bloodDrip.length<14) e.bloodDrip.push({x:lx+rand(-4,4), y:ly, vy:30+Math.random()*30, life:1.4});
+            // red blood particles
+            for(let pp=0;pp<5;pp++){ const a=Math.random()*Math.PI*2, sp=80+Math.random()*120;
+              fx.push({x:b.x,y:b.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.4,col:'#a0202a',sz:2+Math.random()*2});
+            }
+          }
           // electric chain
           if(b.type==='electric' && b.chains>0){
             b.chains--;
@@ -1181,6 +1495,7 @@ function loop(ts){
             if(big){
               state.bossActive=false; state.lv++; state.bossSpawnAt = state.score + 30 + state.lv*15;
               $('lv').textContent=state.lv; toast('LEVEL UP! Lv '+state.lv);
+              bumpBossKill();
               nextBg(); // change background after boss
               bgmSwitch(bgmForLevel(state.lv, false));
               // boss drops items (more variety, includes flame)
@@ -1215,9 +1530,12 @@ function loop(ts){
       e.x += e.vx*dt;
       if(e.x<e.w/2){ e.x=e.w/2; e.vx*=-1; }
       if(e.x>W-e.w/2){ e.x=W-e.w/2; e.vx*=-1; }
-      if(e.y < 130) e.y += e.vy*dt;
+      if(e.y < 160) e.y += e.vy*dt;
       e.fireT -= dt;
       if(e.fireT<=0){ e.fireT = e.hp<e.maxHp*0.4? 0.6 : 0.95; enemyShoot(e); }
+      // age bruises and blood
+      if(e.bruises) for(let bi=e.bruises.length-1;bi>=0;bi--){ e.bruises[bi].life-=dt*0.3; if(e.bruises[bi].life<=0) e.bruises.splice(bi,1); }
+      if(e.bloodDrip) for(let di=e.bloodDrip.length-1;di>=0;di--){ const d=e.bloodDrip[di]; d.y += d.vy*dt; d.life-=dt; if(d.life<=0) e.bloodDrip.splice(di,1); }
     } else {
       e.x += e.vx*dt; e.y += e.vy*dt;
       if(e.x<20||e.x>W-20) e.vx*=-1;
@@ -1385,7 +1703,7 @@ $('start').addEventListener('click', ()=>{
   ac();
   $('menu').style.display='none';
   $('pause').style.display='block';
-  reset(); bgmStart();
+  reset(); bumpPlay(); bgmStart();
 });
 document.addEventListener('visibilitychange', ()=>{
   if(document.hidden){ bgmStop(); }
